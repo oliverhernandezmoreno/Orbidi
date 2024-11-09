@@ -14,7 +14,7 @@ Esta infraestructura proporciona alta disponibilidad y escalabilidad para aplica
 4. **Instancias EC2**:Ambas aplicaciones FastAPI en contenedores Docker. Utilizar ECR (Elastic Container Registry) para almacenar las imágenes Docker, y ECS (Elastic Container Service) o EKS (Elastic Kubernetes Service) para ejecutar los contenedores en una infraestructura escalable y manejada.
 
 ## Technical Decisions
-- **Terraform**: Elegi porque permite la creación, modificación y destrucción de recursos de forma declarativa, lo que facilita la gestión de infraestructuras a gran escala. Al usar módulos reutilizables, puedes tener un diseño limpio y eficiente.
+- **Terraform**: Elegi esta herramienta ya que permite la creación, modificación y destrucción de recursos de forma declarativa, lo que facilita la gestión de infraestructuras a gran escala. Al usar módulos reutilizables, puedes tener un diseño limpio y eficiente.
     - **Módulos de Terraform**: La infraestructura se organizará en módulos, lo que facilita su reutilización y mantenimiento. Los módulos más comunes incluirán:
     - **Módulo VPC**: Para crear la red privada con subredes públicas y privadas.
     - **Módulo EC2** : Para la creación de instancias EC2 que alojarán las aplicaciones.
@@ -38,8 +38,8 @@ Esta infraestructura proporciona alta disponibilidad y escalabilidad para aplica
 - **Secret Management**: Uso de Secrets Manager para gestionar los secretos.
 
 
-**Alta disponibilidad:** Usando ELB y Auto Scaling.
-**Escalabilidad:** EC2 Auto Scaling y Terraform.
-**Seguridad:** Secrets Manager para manejo de secretos y S3 + DynamoDB para estado de Terraform.
-**Contenerización:** FastAPI dentro de contenedores Docker.
-**Automatización:** CI/CD con GitHub Actions y Terraform.
+**Alta disponibilidad**: Usando ELB y Auto Scaling.
+**Escalabilidad**: EC2 Auto Scaling y Terraform.
+**Seguridad**: Secrets Manager para manejo de secretos y S3 + DynamoDB para estado de Terraform.
+**Contenerización**: FastAPI dentro de contenedores Docker.
+**Automatización**: CI/CD con GitHub Actions y Terraform.

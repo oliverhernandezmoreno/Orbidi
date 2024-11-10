@@ -16,7 +16,7 @@ Multiple Availability Zones (AZs): La infraestructura se desplegará en múltipl
 
 ## Desiciones Tecnicas
 - **Terraform**: Elegi esta herramienta ya que permite la creación, modificación y destrucción de recursos de forma declarativa, lo que facilita la gestión de infraestructuras a gran escala. Al usar módulos reutilizables, puedes tener un diseño limpio y eficiente.
-    - **Módulos de Terraform**: La infraestructura se organizará en módulos, lo que facilita su reutilización y mantenimiento. Los módulos más comunes incluirán:
+    - **Módulos de Terraform**: La infraestructura se organizará en módulos, lo que facilita su reutilización y mantenimiento. Los módulos que se incluiran son:
     - **Módulo VPC**: Para crear la red privada con subredes públicas y privadas.
     - **Módulo EC2** : Para crear de instancias EC2 que alojarán las aplicaciones.
     - **Módulo Auto Scaling**: Para manejar el escalado automático de las instancias EC2 en función del tráfico.

@@ -6,7 +6,9 @@ Esta infraestructura proporciona alta disponibilidad y escalabilidad para aplica
 ## Componentes
 1. **VPC**: Personalizada para la seguridad y aislamiento de los recursos. Dividirla en varias subredes (privadas y públicas) en al menos dos zonas de disponibilidad para asegurar la alta disponibilidad.
 
-2. **Auto Scaling Group y ALB**:Grupo de autoescalado con un balanceador de carga de aplicaciones para distribuir el tráfico de manera eficiente y garantizar alta disponibilidad. 
+2. **Auto Scaling Group y ALB**: Para asegurar que las aplicaciones estén siempre disponibles, se configurarán grupos de Auto Scaling que permitirán agregar y eliminar instancias EC2 en función de la demanda. El Application Load Balancer distribuirá el tráfico entrante entre estas instancias, asegurando alta disponibilidad.
+
+Multiple Availability Zones (AZs): La infraestructura se desplegará en múltiples zonas de disponibilidad para garantizar que, si una zona experimenta problemas, las aplicaciones sigan funcionando sin interrupciones.
 
 3. **S3 y DynamoDB**: S3 para almacenar el estado de Terraform y DynamoDB para el bloqueo del estado, asegurando la gestión multiusuario y evitando conflictos de estado.
 
@@ -16,7 +18,7 @@ Esta infraestructura proporciona alta disponibilidad y escalabilidad para aplica
 - **Terraform**: Elegi esta herramienta ya que permite la creación, modificación y destrucción de recursos de forma declarativa, lo que facilita la gestión de infraestructuras a gran escala. Al usar módulos reutilizables, puedes tener un diseño limpio y eficiente.
     - **Módulos de Terraform**: La infraestructura se organizará en módulos, lo que facilita su reutilización y mantenimiento. Los módulos más comunes incluirán:
     - **Módulo VPC**: Para crear la red privada con subredes públicas y privadas.
-    - **Módulo EC2** : Para la creación de instancias EC2 que alojarán las aplicaciones.
+    - **Módulo EC2** : Para crear de instancias EC2 que alojarán las aplicaciones.
     - **Módulo Auto Scaling**: Para manejar el escalado automático de las instancias EC2 en función del tráfico.
     - **Módulo ALB (Application Load Balancer)**: Para distribuir el tráfico entre las instancias de manera eficiente.
     - **Módulo S3**: Para gestionar el almacenamiento de archivos estáticos y backups.
@@ -40,4 +42,7 @@ Esta infraestructura proporciona alta disponibilidad y escalabilidad para aplica
 - **IAM Roles y Policies**: Configurar políticas específicas para los servicios de AWS que se utilizarán, aplicando el principio de privilegio mínimo.
 - **Secret Management**: Uso de Secrets Manager para la gestión segura de credenciales .
 
+## Costos 
+- **Optimización de Costos**: Se debe considerar la utilización de instancias EC2 de tipo Spot o con precios bajo demanda según la carga de tráfico.
+- **Uso de recursos compartidos**: Aprovechar recursos como el ALB y DynamoDB para reducir la cantidad de recursos individuales necesarios.
 

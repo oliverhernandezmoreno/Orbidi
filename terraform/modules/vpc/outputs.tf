@@ -1,5 +1,11 @@
-module "vpc" {
-  source = "./modules/vpc"
-  cidr_block = "10.0.0.0/16"
-  availability_zones = var.availability_zones
+output "vpc_id" {
+  value = aws_vpc.main.id
+}
+
+output "public_subnet_ids" {
+  value = aws_subnet.public[*].id
+}
+
+output "private_subnet_ids" {
+  value = aws_subnet.private[*].id
 }

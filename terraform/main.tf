@@ -1,7 +1,3 @@
-provider "aws" {
-  region = var.aws_region
-}
-
 module "vpc" {
   source            = "./modules/vpc"
   vpc_cidr          = var.vpc_cidr
@@ -12,7 +8,7 @@ module "vpc" {
 
 module "ec2" {
   source         = "./modules/ec2"
-  ami_id         = "ami-0c55b159cbfafe1f0"  # Amazon Linux 2
+  ami_id         = "ami-0c55b159cbfafe1f0"  # Amazon Linux Configurar
   instance_type  = "t3.micro"
   subnet_ids     = module.vpc.public_subnet_ids
   key_name       = var.key_name
@@ -20,7 +16,7 @@ module "ec2" {
 
 # Módulo de Auto Scaling: configura un grupo de escalado automático
 module "autoscaling" {
-  source            = "./modules/autoscaling"
+  source            = "./modules/asg"
   ami_id            = var.ami_id
   instance_type     = var.instance_type
   key_name          = var.key_name

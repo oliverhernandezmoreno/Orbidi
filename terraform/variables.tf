@@ -1,136 +1,152 @@
-
-variable "aws_region" {
+#Define AWS Region
+variable "region" {
   description = "Infrastructure region"
   type        = string
   default     = "us-east-2"
 }
-
-// Variables para el módulo VPC
+#Define IAM User Access Key
+variable "access_key" {
+  description = "The access_key that belongs to the IAM user"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+#Define IAM User Secret Key
+variable "secret_key" {
+  description = "The secret_key that belongs to the IAM user"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
 variable "vpc_cidr" {
-  description = "CIDR block para la VPC"
-  type        = string
-  default     = "10.0.0.0/16"
+  description = "the vpc cidr"
+  default     = "10.20.30.0/24"
 }
-
-variable "public_subnets" {
-  description = "CIDR blocks para las subredes públicas"
+variable "subnet_cidr_private" {
+  description = "cidr blocks for the private subnets"
+  default     = ["10.20.30.0/27", "10.20.30.32/27", "10.20.30.64/27"]
+  type        = list(any)
+}
+variable "subnet_cidr_public" {
+  description = "cidr blocks for the public subnets"
+  default     = ["10.20.30.96/27", "10.20.30.128/27", "10.20.30.160/27"]
+  type        = list(any)
+}
+variable "ami_name" {
+  description = "The ami name of the image from where the instances will be created"
+  default     = ["amzn2-ami-amd-hvm-2.0.20230727.0-x86_64-gp2"]
   type        = list(string)
-  default     = ["10.0.1.0/24", "10.0.2.0/24"]
 }
-
-variable "private_subnets" {
-  description = "CIDR blocks para las subredes privadas"
-  type        = list(string)
-  default     = ["10.0.3.0/24", "10.0.4.0/24"]
-}
-
-variable "availability_zones" {
-  description = "Zonas de disponibilidad para las subredes"
-  type        = list(string)
-  default     = ["us-east-1a", "us-east-1b"]
-}
-
-#Variables para el módulo EC2
-# EC2 configuration
-variable "ami_id" {
-  description = "AMI ID for EC2 instances"
-  type        = string
-  default     = "ami-0c55b159cbfafe1f0" # Amazon Linux 2
-}
-
 variable "instance_type" {
-  description = "Instance type for EC2"
-  type        = string
-  default     = "t3.micro"
-}
-
-variable "ec2_instance_count" {
-  description = "Number of EC2 instances"
-  type        = number
-  default     = 2
-}
-
-variable "key_name" {
-  description = "Key pair name for EC2 instances"
+  description = "The instance type of the EC2 instances"
+  default     = "t2.medium"
   type        = string
 }
-
-
-
-# Auto Scaling configuration
-variable "autoscaling_desired_capacity" {
-  description = "Desired capacity of Auto Scaling group"
-  type        = number
-  default     = 2
+variable "name" {
+  description = "The name of the application."
+  type        = string
+  default     = "app-3"
 }
 
-variable "autoscaling_max_size" {
-  description = "Maximum size of Auto Scaling group"
-  type        = number
-  default     = 4
+# Identificador de la instancia de EC2
+variable "instance_id" {
+  description = "ID de la instancia EC2 para la alarma de CPU"
+  type        = string
 }
 
-variable "autoscaling_min_size" {
-  description = "Minimum size of Auto Scaling group"
+# Umbral de CPU para activar la alarma
+variable "cpu_threshold" {
+  description = "Umbral de CPU para la alarma"
+  type        = number
+  default     = 80
+}
+
+# Activar alarma de CPU
+variable "enable_cpu_alarm" {
+  description = "Activar alarma de CloudWatch para la utilización de CPU"
+  type        = bool
+  default     = true
+}
+
+# Nombre del balanceador de carga (ALB)
+variable "alb_name" {
+  description = "Nombre del balanceador de carga para la alarma de hosts saludables"
+  type        = string
+  default     = ""
+}
+
+# Umbral de hosts saludables para el ALB
+variable "alb_threshold" {
+  description = "Umbral de conteo de hosts saludables para el ALB"
   type        = number
   default     = 1
 }
 
-# S3 bucket configuration
-variable "s3_bucket_name" {
-  description = "Name of the S3 bucket"
-  type        = string
+# Activar alarma para ALB
+variable "enable_alb_alarm" {
+  description = "Activar alarma de CloudWatch para el ALB"
+  type        = bool
+  default     = false
 }
 
-# DynamoDB configuration
-variable "dynamodb_table_name" {
-  description = "Name of DynamoDB table for state locking"
+# Prefijo del nombre para las alarmas
+variable "alarm_name_prefix" {
+  description = "Prefijo para los nombres de las alarmas"
   type        = string
+  default     = "app"
 }
 
-# RDS configuration
-variable "rds_engine" {
-  description = "Database engine for RDS"
-  type        = string
-  default     = "mysql"
-}
-
-variable "rds_instance_class" {
-  description = "Instance class for RDS"
-  type        = string
-  default     = "db.t3.micro"
-}
-
-variable "rds_allocated_storage" {
-  description = "Allocated storage for RDS"
+# Período de tiempo en segundos para la métrica de CloudWatch
+variable "alarm_period" {
+  description = "Período de tiempo en segundos para las métricas de CloudWatch"
   type        = number
-  default     = 20
+  default     = 300
 }
 
-variable "rds_db_name" {
-  description = "Database name for RDS"
-  type        = string
-}
-
-variable "rds_username" {
-  description = "Username for RDS"
-  type        = string
-}
-
-variable "rds_password" {
-  description = "Password for RDS"
-  type        = string
-  sensitive   = true
-}
-
-# CloudWatch configuration
-variable "cloudwatch_log_group_name" {
-  description = "Log group name for CloudWatch"
-  type        = string
-}
-
-variable "cloudwatch_retention_in_days" {
-  description = "Retention period in days for CloudWatch logs"
+# Períodos de evaluación necesarios para activar la alarma
+variable "evaluation_periods" {
+  description = "Número de períodos de evaluación para activar la alarma"
   type        = number
-  default     = 7
+  default     = 2
+}
+
+# Acciones a ejecutar cuando la alarma está activa
+variable "alarm_actions" {
+  description = "Acciones de SNS u otros recursos a ejecutar cuando la alarma esté activa"
+  type        = list(string)
+  default     = []
+}
+
+# Acciones a ejecutar cuando la alarma vuelva al estado OK
+variable "ok_actions" {
+  description = "Acciones de SNS u otros recursos a ejecutar cuando la alarma esté en estado OK"
+  type        = list(string)
+  default     = []
+}
+# ARN de la alarma de CPU
+output "cpu_utilization_alarm_arn" {
+  description = "ARN de la alarma de CloudWatch para la utilización de CPU"
+  value       = aws_cloudwatch_metric_alarm.cpu_utilization_alarm.arn
+  #condition   = var.enable_cpu_alarm
+}
+
+# Nombre de la alarma de CPU
+output "cpu_utilization_alarm_name" {
+  description = "Nombre de la alarma de CloudWatch para la utilización de CPU"
+  value       = aws_cloudwatch_metric_alarm.cpu_utilization_alarm.alarm_name
+#  condition   = var.enable_cpu_alarm
+}
+
+# ARN de la alarma de ALB
+output "alb_healthy_host_count_alarm_arn" {
+  description = "ARN de la alarma de CloudWatch para el conteo de hosts saludables en el ALB"
+  value       = aws_cloudwatch_metric_alarm.alb_healthy_host_count.arn
+ # condition   = var.enable_alb_alarm
+}
+
+# Nombre de la alarma de ALB
+output "alb_healthy_host_count_alarm_name" {
+  description = "Nombre de la alarma de CloudWatch para el conteo de hosts saludables en el ALB"
+  value       = aws_cloudwatch_metric_alarm.alb_healthy_host_count.alarm_name
+  #condition   = var.enable_alb_alarm
 }

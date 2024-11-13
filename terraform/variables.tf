@@ -2,21 +2,21 @@
 variable "region" {
   description = "Infrastructure region"
   type        = string
-  default     = "us-east-2"
+  default     = "us-east-1"
 }
 #Define IAM User Access Key
 variable "access_key" {
   description = "The access_key that belongs to the IAM user"
   type        = string
   sensitive   = true
-  default     = ""
+  default     = "AKIAX5N26Y2HKJMOLCBO"
 }
 #Define IAM User Secret Key
 variable "secret_key" {
   description = "The secret_key that belongs to the IAM user"
   type        = string
   sensitive   = true
-  default     = ""
+  default     = "/2qcmkpz+GV/9Y+Njrdqx0ntxvjpBAXsqz0YrQ4p"
 }
 variable "vpc_cidr" {
   description = "the vpc cidr"
@@ -38,6 +38,7 @@ variable "ami_name" {
   type        = list(string)
 }
 variable "instance_type" {
+  
   description = "The instance type of the EC2 instances"
   default     = "t2.medium"
   type        = string
@@ -123,30 +124,98 @@ variable "ok_actions" {
   type        = list(string)
   default     = []
 }
-# ARN de la alarma de CPU
-output "cpu_utilization_alarm_arn" {
-  description = "ARN de la alarma de CloudWatch para la utilización de CPU"
-  value       = aws_cloudwatch_metric_alarm.cpu_utilization_alarm.arn
-  #condition   = var.enable_cpu_alarm
+
+
+# Nombre del bucket S3
+variable "bucket_name" {
+  description = "orbidi-bucket"
+  type        = string
 }
 
-# Nombre de la alarma de CPU
-output "cpu_utilization_alarm_name" {
-  description = "Nombre de la alarma de CloudWatch para la utilización de CPU"
-  value       = aws_cloudwatch_metric_alarm.cpu_utilization_alarm.alarm_name
-#  condition   = var.enable_cpu_alarm
+# ACL del bucket S3
+variable "bucket_acl" {
+  description = "Control de acceso para el bucket S3"
+  type        = string
+  default     = "private"
 }
 
-# ARN de la alarma de ALB
-output "alb_healthy_host_count_alarm_arn" {
-  description = "ARN de la alarma de CloudWatch para el conteo de hosts saludables en el ALB"
-  value       = aws_cloudwatch_metric_alarm.alb_healthy_host_count.arn
- # condition   = var.enable_alb_alarm
+# Activar versionado en el bucket
+variable "enable_versioning" {
+  description = "Activar versionado en el bucket S3"
+  type        = bool
+  default     = false
+}
+# Etiquetas para el bucket
+variable "tags" {
+  description = "Etiquetas aplicadas al bucket S3"
+  type        = map(string)
+  default     = {}
 }
 
-# Nombre de la alarma de ALB
-output "alb_healthy_host_count_alarm_name" {
-  description = "Nombre de la alarma de CloudWatch para el conteo de hosts saludables en el ALB"
-  value       = aws_cloudwatch_metric_alarm.alb_healthy_host_count.alarm_name
-  #condition   = var.enable_alb_alarm
+# Clave de partición (hash) de la tabla
+variable "hash_key" {
+  description = "Clave de partición (hash) de la tabla"
+  type        = string
+}
+
+# Tipo de dato de la clave de partición (S para String, N para Number, B para Binary)
+variable "hash_key_type" {
+  description = "Tipo de dato de la clave de partición (hash)"
+  type        = string
+  default     = "S"
+}
+
+# Clave de ordenación (rango) de la tabla (opcional)
+variable "range_key" {
+  description = "Clave de ordenación (rango) de la tabla"
+  type        = string
+  default     = ""
+}
+
+# Tipo de dato de la clave de ordenación (rango) (S para String, N para Number, B para Binary)
+variable "range_key_type" {
+  description = "Tipo de dato de la clave de ordenación (rango)"
+  type        = string
+  default     = "S"
+}
+
+# Modo de facturación: PAY_PER_REQUEST o PROVISIONED
+variable "billing_mode" {
+  description = "Modo de facturación: PAY_PER_REQUEST o PROVISIONED"
+  type        = string
+  default     = "PAY_PER_REQUEST"
+}
+
+# Capacidad de lectura (solo aplicable si billing_mode es PROVISIONED)
+variable "read_capacity" {
+  description = "Capacidad de lectura para la tabla DynamoDB (si billing_mode es PROVISIONED)"
+  type        = number
+  default     = 5
+}
+
+# Capacidad de escritura (solo aplicable si billing_mode es PROVISIONED)
+variable "write_capacity" {
+  description = "Capacidad de escritura para la tabla DynamoDB (si billing_mode es PROVISIONED)"
+  type        = number
+  default     = 5
+}
+
+# Configuración de índices globales secundarios (opcional)
+variable "global_secondary_indexes" {
+  description = "Configuración de índices globales secundarios"
+  type = list(object({
+    name               = string
+    hash_key           = string
+    range_key          = optional(string)
+    read_capacity      = optional(number)
+    write_capacity     = optional(number)
+    projection_type    = string
+    non_key_attributes = optional(list(string))
+  }))
+  default = []
+}
+
+variable "table_name" {
+  description = "Name of DynamoDB table for state locking"
+  type        = string
 }

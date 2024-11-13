@@ -9,14 +9,14 @@ variable "access_key" {
   description = "The access_key that belongs to the IAM user"
   type        = string
   sensitive   = true
-  default     = ""
+  #default     = ""
 }
 #Define IAM User Secret Key
 variable "secret_key" {
   description = "The secret_key that belongs to the IAM user"
   type        = string
   sensitive   = true
-  default     = ""
+  #default     = ""
 }
 variable "vpc_cidr" {
   description = "the vpc cidr"

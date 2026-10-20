@@ -1,6 +1,6 @@
 # Alarma de CloudWatch para la utilización de CPU en instancias EC2
 resource "aws_cloudwatch_metric_alarm" "cpu_utilization_alarm" {
-  count               = var.enable_cpu_alarm ? 1 : 0
+  count               = var.enable_cpu_alarm && var.instance_id != "" ? 1 : 0
   alarm_name          = "${var.alarm_name_prefix}-cpu-utilization"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = var.evaluation_periods

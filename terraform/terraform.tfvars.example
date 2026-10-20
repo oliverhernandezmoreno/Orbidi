@@ -1,0 +1,17 @@
+# Copiar a terraform.tfvars y ajustar los valores.
+# terraform.tfvars está en .gitignore: no versionar secretos.
+
+region = "us-east-1"
+# aws_profile = "default"   # opcional; null usa la cadena de credenciales por defecto
+
+name = "app-3"
+
+# Bucket de estado. Si se omite se genera "<name>-tfstate-<account_id>".
+# bucket_name = "orbidi-tfstate-123456789012"
+
+# DynamoDB
+table_name      = "orbidi-app"
+lock_table_name = "orbidi-terraform-locks"
+hash_key        = "id"
+
+instance_type = "t2.medium"

@@ -53,25 +53,35 @@ resource "aws_iam_role_policy_attachment" "github_poweruser" {
 
 data "aws_iam_policy_document" "github_iam" {
   statement {
-    sid = "IamRead"
+    sid       = "IamList"
+    actions   = ["iam:ListRoles", "iam:ListOpenIDConnectProviders"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "IamReadScoped"
     actions = [
       "iam:GetRole",
       "iam:GetRolePolicy",
       "iam:ListRolePolicies",
       "iam:ListAttachedRolePolicies",
-      "iam:ListRoles",
       "iam:GetPolicy",
       "iam:GetPolicyVersion",
       "iam:ListPolicyVersions",
       "iam:GetInstanceProfile",
       "iam:GetOpenIDConnectProvider",
-      "iam:ListOpenIDConnectProviders",
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:iam::${local.account_id}:role/${var.project}-*",
+      "arn:aws:iam::${local.account_id}:role/${var.app_name}-*",
+      "arn:aws:iam::${local.account_id}:policy/${var.project}-*",
+      "arn:aws:iam::${local.account_id}:instance-profile/${var.app_name}-*",
+      "arn:aws:iam::${local.account_id}:oidc-provider/*",
+    ]
   }
 
   statement {
-    sid = "IamManageScopedResources"
+    sid = "IamManageScoped"
     actions = [
       "iam:CreateRole",
       "iam:DeleteRole",
@@ -83,7 +93,6 @@ data "aws_iam_policy_document" "github_iam" {
       "iam:DeleteRolePolicy",
       "iam:TagRole",
       "iam:UntagRole",
-      "iam:PassRole",
       "iam:CreateInstanceProfile",
       "iam:DeleteInstanceProfile",
       "iam:AddRoleToInstanceProfile",
@@ -104,9 +113,33 @@ data "aws_iam_policy_document" "github_iam" {
   }
 
   statement {
+    sid     = "PassRoleToEcs"
+    actions = ["iam:PassRole"]
+    resources = [
+      "arn:aws:iam::${local.account_id}:role/${var.project}-*",
+      "arn:aws:iam::${local.account_id}:role/${var.app_name}-*",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com", "ecs.amazonaws.com"]
+    }
+  }
+
+  statement {
     sid       = "ServiceLinkedRoles"
     actions   = ["iam:CreateServiceLinkedRole"]
     resources = ["*"]
+    condition {
+      test     = "StringLike"
+      variable = "iam:AWSServiceName"
+      values = [
+        "ecs.amazonaws.com",
+        "elasticloadbalancing.amazonaws.com",
+        "autoscaling.amazonaws.com",
+        "ecs.application-autoscaling.amazonaws.com",
+      ]
+    }
   }
 }
 

@@ -4,6 +4,7 @@ data "aws_elb_service_account" "current" {}
 # -------------------------
 # Notificaciones
 # -------------------------
+# trivy:ignore:AWS-0136 -- clave gestionada por AWS; CMK en Fase 6
 resource "aws_sns_topic" "alerts" {
   name              = "${var.name}-alerts"
   kms_master_key_id = "alias/aws/sns"
@@ -43,6 +44,7 @@ resource "aws_s3_bucket_public_access_block" "alb_logs" {
   restrict_public_buckets = true
 }
 
+# trivy:ignore:AWS-0132 -- SSE-S3; CMK en Fase 6
 resource "aws_s3_bucket_server_side_encryption_configuration" "alb_logs" {
   bucket = aws_s3_bucket.alb_logs.id
 

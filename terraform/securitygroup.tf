@@ -74,6 +74,7 @@ resource "aws_security_group_rule" "ecs_ingress_alb" {
   security_group_id        = aws_security_group.ecs_service.id
 }
 
+# trivy:ignore:AWS-0104 -- 443 abierto hasta migrar a VPC Endpoints (Fase 6)
 resource "aws_security_group_rule" "ecs_egress_https" {
   description       = "Salida HTTPS a ECR, CloudWatch y APIs de AWS"
   type              = "egress"
@@ -90,7 +91,7 @@ resource "aws_security_group_rule" "ecs_egress_dns_udp" {
   from_port         = 53
   to_port           = 53
   protocol          = "udp"
-  cidr_blocks       = ["0.0.0.0/0"]
+  cidr_blocks       = [var.vpc_cidr]
   security_group_id = aws_security_group.ecs_service.id
 }
 
@@ -100,6 +101,6 @@ resource "aws_security_group_rule" "ecs_egress_dns_tcp" {
   from_port         = 53
   to_port           = 53
   protocol          = "tcp"
-  cidr_blocks       = ["0.0.0.0/0"]
+  cidr_blocks       = [var.vpc_cidr]
   security_group_id = aws_security_group.ecs_service.id
 }

@@ -25,6 +25,7 @@ resource "aws_lb_target_group" "front" {
 }
 
 # HTTP: redirige a HTTPS si hay certificado; si no, reenvía al target group.
+# trivy:ignore:AWS-0054 -- HTTP solo en dev; HTTPS se habilita con certificate_arn
 resource "aws_lb_listener" "front_end" {
   load_balancer_arn = aws_lb.front.arn
   port              = "80"
@@ -62,6 +63,7 @@ resource "aws_lb_listener" "https" {
 }
 
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb
+# trivy:ignore:AWS-0053 -- ALB público por diseño (API pública)
 resource "aws_lb" "front" {
   name               = var.name
   internal           = false

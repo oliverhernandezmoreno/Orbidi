@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.7.0"
 
   required_providers {
     aws = {
@@ -8,6 +8,6 @@ terraform {
     }
   }
 
-  # El backend remoto (S3 + DynamoDB) se habilita en la Fase 1 del PLAN.md.
-  # Hasta entonces el estado es local para no bloquear el bootstrap.
+  # El backend remoto (S3 + DynamoDB) se configura en backend.tf con
+  # -backend-config=backend.hcl. El bucket y la tabla los crea bootstrap/.
 }

@@ -15,7 +15,7 @@ La documentación describía una arquitectura razonable (VPC multi-AZ + ALB + Au
 - No existía entrega de la aplicación: las instancias del ASG arrancaban sin código.
 - El estado era local, aunque la documentación afirmaba que era remoto.
 
-Estado actual: **Fases 0 a 4 completadas**. La infraestructura valida, corre en ECS Fargate, usa OIDC y tiene observabilidad básica.
+Estado actual: **Fases 0 a 5 y 7 completadas**. La infraestructura valida, corre en ECS Fargate, usa OIDC, tiene observabilidad básica, tests de plan y documentación alineada.
 
 ---
 
@@ -61,7 +61,7 @@ Estado actual: **Fases 0 a 4 completadas**. La infraestructura valida, corre en 
 | E-24 | Sin `required_version` y lockfile ignorado. | ✅ Fase 0 |
 | E-25 | Tags incompletos. | ✅ `Project`/`Environment`/`Layer` |
 | E-26 | `.gitignore` con `*.exe.`. | ✅ Fase 0 |
-| E-27 | Sin `tflint` ni tests. | 🟡 Fase 3 (tflint/trivy report-only); tests ⏳ Fase 5 |
+| E-27 | Sin `tflint` ni tests. | ✅ Fase 5 (`terraform test`, tflint/trivy bloqueantes) |
 | E-28 | Sin logs, dashboards ni alarmas de 5xx. | ✅ Fase 4 |
 | E-29 | CI duplicado; `branches: ['*']`. | ✅ Fase 0 |
 
@@ -152,7 +152,7 @@ Decisiones:
 - [x] Inyección de secretos (`app_secrets`) + permiso de lectura en el rol de ejecución.
 - [x] ECR con tags inmutables y scan on push.
 - [x] ALB access logs a S3 con lifecycle.
-- [x] Checkov bloqueante con baseline justificado; tflint y trivy (report-only).
+- [x] Checkov bloqueante con baseline justificado; tflint y trivy.
 
 **Pendiente de Fase 3 (movido a Fase 6):** WAF, KMS con CMK, restricción total de egress con VPC Endpoints.
 
@@ -164,12 +164,13 @@ Decisiones:
 - [x] Log group de app y de Flow Logs con retención configurable.
 - [x] `RUNBOOK.md` con alarmas, rollback, escala y diagnóstico.
 
-### Fase 5 — CI/CD maduro ⏳
+### Fase 5 — CI/CD maduro ✅
 
-- [ ] `terraform test` / Terratest y smoke test post-deploy.
-- [ ] tflint/trivy como gates bloqueantes.
-- [ ] Required reviewers en el environment `production`.
-- [ ] Infracost estable.
+- [x] `terraform test` con `mock_provider` en `terraform/` y `bootstrap/` (sin credenciales).
+- [x] Smoke test de `/health` después del apply.
+- [x] tflint y trivy como gates bloqueantes.
+- [x] `deploy` depende de `validate` + `lint`.
+- [x] Required reviewers e Infracost documentados como configuración de GitHub (no versionable en el repo).
 
 ### Fase 6 — Evolución ⏳
 
@@ -283,4 +284,4 @@ Sin credenciales, `fmt` + `init -backend=false` + `validate` son el gate mínimo
 | 6 Evolución | continuo | Deuda técnica y costo |
 | 7 Documentación | 1–2 d | Brecha docs↔código |
 
-**Próximo paso:** Fase 5 (tests/gates) y Fase 7 (README/design).
+**Próximo paso:** Fase 6 (WAF, KMS, VPC Endpoints, módulos y entornos).

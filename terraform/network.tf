@@ -56,14 +56,14 @@ resource "aws_route_table" "public" {
 #https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association
 resource "aws_route_table_association" "private" {
   count          = length(var.subnet_cidr_private)
-  subnet_id      = element(aws_subnet.private.*.id, count.index)
+  subnet_id      = element(aws_subnet.private[*].id, count.index)
   route_table_id = aws_route_table.private[count.index].id
 }
 
 #https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association
 resource "aws_route_table_association" "public" {
   count          = length(var.subnet_cidr_public)
-  subnet_id      = element(aws_subnet.public.*.id, count.index)
+  subnet_id      = element(aws_subnet.public[*].id, count.index)
   route_table_id = aws_route_table.public.id
 }
 
@@ -92,7 +92,7 @@ resource "aws_eip" "nat_gateway" {
 #https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/nat_gateway
 resource "aws_nat_gateway" "public" {
   count         = length(var.subnet_cidr_public)
-  subnet_id     = element(aws_subnet.public.*.id, count.index)
+  subnet_id     = element(aws_subnet.public[*].id, count.index)
   allocation_id = aws_eip.nat_gateway[count.index].id
   depends_on    = [aws_internet_gateway.this-igw]
   tags = {

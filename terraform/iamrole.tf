@@ -1,34 +1,74 @@
-#Create a role
-#https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role
-resource "aws_iam_role" "ec2_role" {
-  name = "${var.name}-ec2-role"
+data "aws_iam_policy_document" "ecs_tasks_assume_role" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
 
-  # Terraform's "jsonencode" function converts a
-  # Terraform expression result to valid JSON syntax.
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Sid    = ""
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-      },
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+# Rol de ejecución: descarga la imagen de ECR y escribe logs.
+resource "aws_iam_role" "execution" {
+  name               = "${var.name}-task-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "execution" {
+  role       = aws_iam_role.execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+# Rol de la aplicación: permisos mínimos sobre su tabla DynamoDB.
+resource "aws_iam_role" "task" {
+  name               = "${var.name}-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume_role.json
+}
+
+data "aws_iam_policy_document" "task" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
     ]
-  })
-}
-#Attach role to policy
-#https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment
-resource "aws_iam_role_policy_attachment" "custom" {
-  role       = aws_iam_role.ec2_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+    resources = [
+      aws_dynamodb_table.app_table.arn,
+      "${aws_dynamodb_table.app_table.arn}/index/*",
+    ]
+  }
 }
 
-#Attach role to an instance profile
-#https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_instance_profile
-resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "${var.name}-ec2-profile"
-  role = aws_iam_role.ec2_role.name
+resource "aws_iam_role_policy" "task" {
+  name   = "${var.name}-task-dynamodb"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.task.json
+}
+
+# Permite al rol de ejecución leer secretos inyectados en la tarea.
+data "aws_iam_policy_document" "execution_secrets" {
+  count = length(var.app_secrets) > 0 ? 1 : 0
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+    ]
+    resources = values(var.app_secrets)
+  }
+}
+
+resource "aws_iam_role_policy" "execution_secrets" {
+  count = length(var.app_secrets) > 0 ? 1 : 0
+
+  name   = "${var.name}-task-execution-secrets"
+  role   = aws_iam_role.execution.id
+  policy = data.aws_iam_policy_document.execution_secrets[0].json
 }

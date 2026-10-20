@@ -1,0 +1,10 @@
+# Copiar a backend.hcl y completar con el account id real.
+#   terraform init -backend-config=backend.hcl
+#
+# Los valores coinciden con los defaults de bootstrap/.
+
+bucket         = "orbidi-tfstate-123456789012"
+key            = "orbidi/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "orbidi-terraform-locks"
+encrypt        = true

@@ -1,0 +1,9 @@
+# Copiar a bootstrap/terraform.tfvars y ajustar.
+# terraform.tfvars está en .gitignore.
+
+region  = "us-east-1"
+project = "orbidi"
+
+# bucket_name = "orbidi-tfstate-123456789012"
+# lock_table_name = "orbidi-terraform-locks"
+# ecr_repository_name = "orbidi/api"

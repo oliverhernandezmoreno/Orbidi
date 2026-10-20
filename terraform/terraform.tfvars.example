@@ -1,0 +1,39 @@
+# Copiar a terraform.tfvars y ajustar. terraform.tfvars está en .gitignore.
+
+region      = "us-east-1"
+environment = "dev"
+# aws_profile = "default"
+
+name = "app-3"
+
+# Debe coincidir con bootstrap/ecr_repository_name
+ecr_repository_name = "orbidi/api"
+image_tag           = "latest"
+
+# ECS Fargate
+container_port = 8000
+task_cpu       = 256
+task_memory    = 512
+desired_count  = 2
+min_capacity   = 2
+max_capacity   = 6
+
+# HTTPS (opcional). Sin certificate_arn el ALB queda solo en HTTP.
+# certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/..."
+
+# Observabilidad
+alarm_email          = ""
+latency_threshold_ms = 1000
+log_retention_days   = 30
+
+# Protecciones de producción
+enable_deletion_protection = false
+
+# Secretos inyectados en la tarea (variable de entorno -> ARN)
+# app_secrets = {
+#   API_KEY = "arn:aws:secretsmanager:us-east-1:123456789012:secret:orbidi/api-key"
+# }
+
+# DynamoDB
+table_name = "orbidi-app"
+hash_key   = "id"

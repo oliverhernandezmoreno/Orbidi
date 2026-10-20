@@ -1,2 +1,28 @@
-*.lock.hcl
-*.exe
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan.binary
+tfplan.json
+crash.log
+crash.*.log
+
+# Variables locales (pueden contener secretos).
+# El ejemplo versionado es terraform/terraform.tfvars.example
+*.tfvars
+*.auto.tfvars
+!*.tfvars.example
+
+# Entornos y editores
+.env
+.vscode/*
+!.vscode/settings.json
+
+# Backend local (no contiene secretos, pero es específico de cada cuenta)
+backend.hcl
+
+# Python
+__pycache__/
+*.pyc
+.venv/

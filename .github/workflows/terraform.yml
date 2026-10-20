@@ -63,10 +63,46 @@ jobs:
         run: terraform validate -no-color
 
   # ------------------------------------------------------------------
+  # Linters. Report-only hasta la Fase 5.
+  # ------------------------------------------------------------------
+  lint:
+    name: tflint-and-trivy
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: TFLint (terraform)
+        working-directory: terraform
+        run: |
+          tflint --config=../.tflint.hcl --init
+          tflint --config=../.tflint.hcl --recursive --format compact
+
+      - name: TFLint (bootstrap)
+        working-directory: bootstrap
+        run: |
+          tflint --config=../.tflint.hcl --init
+          tflint --config=../.tflint.hcl --recursive --format compact
+
+      - name: Trivy config scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          format: table
+
+  # ------------------------------------------------------------------
   # Plan/Apply con AWS. Requiere:
-  #   - bootstrap/ aplicado (estado remoto + ECR)
-  #   - variable AWS_DEPLOY_ENABLED=true
-  #   - secretos AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+  #   - bootstrap/ aplicado (estado remoto, ECR y rol OIDC)
+  #   - variable AWS_DEPLOY_ENABLED=true y AWS_ROLE_ARN
   # ------------------------------------------------------------------
   deploy:
     name: plan-apply
@@ -91,8 +127,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: gh-actions-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION_NAME }}
 
       - name: Setup Terraform

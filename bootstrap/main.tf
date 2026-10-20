@@ -52,6 +52,25 @@ resource "aws_s3_bucket_public_access_block" "state" {
   depends_on = [aws_s3_bucket_ownership_controls.state]
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "state" {
+  bucket = aws_s3_bucket.state.id
+
+  rule {
+    id     = "expire-noncurrent-versions"
+    status = "Enabled"
+
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
+
 resource "aws_dynamodb_table" "locks" {
   name         = var.lock_table_name
   billing_mode = "PAY_PER_REQUEST"
@@ -75,7 +94,7 @@ resource "aws_dynamodb_table" "locks" {
 # -------------------------
 resource "aws_ecr_repository" "app" {
   name                 = var.ecr_repository_name
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true

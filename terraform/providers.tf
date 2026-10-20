@@ -7,8 +7,9 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Source  = "https://github.com/oliverhernandezmoreno/Orbidi/"
-      Project = "Orbidi"
+      Source      = "https://github.com/oliverhernandezmoreno/Orbidi/"
+      Project     = "Orbidi"
+      Environment = var.environment
     }
   }
 }

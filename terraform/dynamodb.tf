@@ -32,4 +32,14 @@ resource "aws_dynamodb_table" "app_table" {
       write_capacity     = var.billing_mode == "PROVISIONED" ? global_secondary_index.value.write_capacity : null
     }
   }
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  deletion_protection_enabled = var.enable_deletion_protection
 }

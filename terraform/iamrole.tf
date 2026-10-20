@@ -49,3 +49,26 @@ resource "aws_iam_role_policy" "task" {
   role   = aws_iam_role.task.id
   policy = data.aws_iam_policy_document.task.json
 }
+
+# Permite al rol de ejecución leer secretos inyectados en la tarea.
+data "aws_iam_policy_document" "execution_secrets" {
+  count = length(var.app_secrets) > 0 ? 1 : 0
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+    ]
+    resources = values(var.app_secrets)
+  }
+}
+
+resource "aws_iam_role_policy" "execution_secrets" {
+  count = length(var.app_secrets) > 0 ? 1 : 0
+
+  name   = "${var.name}-task-execution-secrets"
+  role   = aws_iam_role.execution.id
+  policy = data.aws_iam_policy_document.execution_secrets[0].json
+}

@@ -19,6 +19,12 @@ variable "name" {
   default     = "app-3"
 }
 
+variable "environment" {
+  description = "Entorno lógico (dev, staging, prod)"
+  type        = string
+  default     = "dev"
+}
+
 # -------------------------
 # Red
 # -------------------------
@@ -94,7 +100,25 @@ variable "max_capacity" {
 variable "log_retention_days" {
   description = "Retención de logs en CloudWatch"
   type        = number
-  default     = 14
+  default     = 30
+}
+
+variable "certificate_arn" {
+  description = "ARN del certificado ACM para habilitar HTTPS. Vacío deja solo HTTP."
+  type        = string
+  default     = ""
+}
+
+variable "app_secrets" {
+  description = "Mapa variable de entorno -> ARN de Secrets Manager/SSM para inyectar en la tarea"
+  type        = map(string)
+  default     = {}
+}
+
+variable "enable_deletion_protection" {
+  description = "Activa deletion protection en DynamoDB y ALB (recomendado en prod)"
+  type        = bool
+  default     = false
 }
 
 # -------------------------
@@ -128,6 +152,18 @@ variable "ok_actions" {
   description = "ARNs a notificar cuando la alarma vuelve a OK"
   type        = list(string)
   default     = []
+}
+
+variable "alarm_email" {
+  description = "Email para suscribir al topic SNS de alarmas. Vacío no crea suscripción."
+  type        = string
+  default     = ""
+}
+
+variable "latency_threshold_ms" {
+  description = "Umbral de latencia p95 del ALB en milisegundos"
+  type        = number
+  default     = 1000
 }
 
 # -------------------------

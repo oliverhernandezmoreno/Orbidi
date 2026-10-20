@@ -29,6 +29,18 @@ resource "aws_security_group_rule" "alb_ingress_http" {
   security_group_id = aws_security_group.alb.id
 }
 
+resource "aws_security_group_rule" "alb_ingress_https" {
+  count = local.https_enabled ? 1 : 0
+
+  description       = "HTTPS desde internet"
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.alb.id
+}
+
 resource "aws_security_group_rule" "alb_egress_ecs" {
   description              = "Trafico hacia las tareas ECS"
   type                     = "egress"

@@ -25,11 +25,11 @@ jobs:
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: .
+          config_file: .checkov.yaml
           output_format: cli,sarif
           output_file_path: console,results.sarif
-          # Fase 0: no bloqueamos merges por hallazgos conocidos.
-          # En Fase 3 se pone en false con un baseline justificado.
-          soft_fail: true
+          # Fase 3: los hallazgos aceptados están documentados en .checkov.yaml.
+          soft_fail: false
 
       - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3

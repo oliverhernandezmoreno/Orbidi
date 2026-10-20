@@ -42,6 +42,12 @@ resource "aws_ecs_task_definition" "app" {
         { name = "TABLE_NAME", value = aws_dynamodb_table.app_table.name },
         { name = "AWS_REGION", value = var.region }
       ]
+      secrets = [
+        for name, arn in var.app_secrets : {
+          name      = name
+          valueFrom = arn
+        }
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {

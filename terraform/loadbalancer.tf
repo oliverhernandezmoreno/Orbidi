@@ -1,3 +1,7 @@
+locals {
+  https_enabled = var.certificate_arn != ""
+}
+
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_target_group
 resource "aws_lb_target_group" "front" {
   name                 = "${var.name}-front"
@@ -20,11 +24,36 @@ resource "aws_lb_target_group" "front" {
   }
 }
 
-# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener
+# HTTP: redirige a HTTPS si hay certificado; si no, reenvía al target group.
 resource "aws_lb_listener" "front_end" {
   load_balancer_arn = aws_lb.front.arn
   port              = "80"
   protocol          = "HTTP"
+
+  default_action {
+    type             = local.https_enabled ? "redirect" : "forward"
+    target_group_arn = local.https_enabled ? null : aws_lb_target_group.front.arn
+
+    dynamic "redirect" {
+      for_each = local.https_enabled ? [1] : []
+      content {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+  }
+}
+
+# HTTPS opcional: solo se crea si se provee certificate_arn.
+resource "aws_lb_listener" "https" {
+  count = local.https_enabled ? 1 : 0
+
+  load_balancer_arn = aws_lb.front.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = var.certificate_arn
 
   default_action {
     type             = "forward"
@@ -40,8 +69,14 @@ resource "aws_lb" "front" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = aws_subnet.public[*].id
 
-  enable_deletion_protection = false
+  enable_deletion_protection = var.enable_deletion_protection
   drop_invalid_header_fields = true
+
+  access_logs {
+    bucket  = aws_s3_bucket.alb_logs.bucket
+    prefix  = var.name
+    enabled = true
+  }
 
   tags = {
     Name = var.name

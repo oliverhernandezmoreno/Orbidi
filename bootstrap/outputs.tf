@@ -22,3 +22,13 @@ output "region" {
   description = "Región usada por el bootstrap"
   value       = var.region
 }
+
+output "github_actions_role_arn" {
+  description = "ARN del rol a configurar en la variable AWS_ROLE_ARN de GitHub"
+  value       = aws_iam_role.github_actions.arn
+}
+
+output "oidc_provider_arn" {
+  description = "ARN del provider OIDC de GitHub"
+  value       = local.oidc_provider_arn
+}

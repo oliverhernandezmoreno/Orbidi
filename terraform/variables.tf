@@ -4,19 +4,27 @@ variable "region" {
   type        = string
   default     = "us-east-1"
 }
-#Define IAM User Access Key
+
+variable "aws_profile" {
+  description = "Perfil de la AWS CLI a usar. Null usa la cadena de credenciales por defecto."
+  type        = string
+  default     = null
+}
+# Variables heredadas: no se usan (el provider toma las credenciales de la
+# cadena por defecto de AWS). Se conservan con default null para no romper
+# tfvars locales y se eliminarán en la Fase 3.
 variable "access_key" {
   description = "The access_key that belongs to the IAM user"
   type        = string
   sensitive   = true
-  #default     = ""
+  default     = null
 }
 #Define IAM User Secret Key
 variable "secret_key" {
   description = "The secret_key that belongs to the IAM user"
   type        = string
   sensitive   = true
-  #default     = ""
+  default     = null
 }
 variable "vpc_cidr" {
   description = "the vpc cidr"
@@ -38,7 +46,7 @@ variable "ami_name" {
   type        = list(string)
 }
 variable "instance_type" {
-  
+
   description = "The instance type of the EC2 instances"
   default     = "t2.medium"
   type        = string
@@ -51,8 +59,9 @@ variable "name" {
 
 # Identificador de la instancia de EC2
 variable "instance_id" {
-  description = "ID de la instancia EC2 para la alarma de CPU"
+  description = "ID de la instancia EC2 para la alarma de CPU. Vacío desactiva la alarma (el ASG es dinámico)."
   type        = string
+  default     = ""
 }
 
 # Umbral de CPU para activar la alarma
@@ -128,8 +137,9 @@ variable "ok_actions" {
 
 # Nombre del bucket S3
 variable "bucket_name" {
-  description = "orbidi-bucket"
+  description = "Nombre del bucket S3 de estado. Null genera uno único por cuenta."
   type        = string
+  default     = null
 }
 
 # ACL del bucket S3
@@ -156,6 +166,7 @@ variable "tags" {
 variable "hash_key" {
   description = "Clave de partición (hash) de la tabla"
   type        = string
+  default     = "id"
 }
 
 # Tipo de dato de la clave de partición (S para String, N para Number, B para Binary)
@@ -216,6 +227,13 @@ variable "global_secondary_indexes" {
 }
 
 variable "table_name" {
-  description = "Name of DynamoDB table for state locking"
+  description = "Nombre de la tabla DynamoDB de la aplicación"
   type        = string
+  default     = "orbidi-app"
+}
+
+variable "lock_table_name" {
+  description = "Nombre de la tabla DynamoDB usada para el bloqueo del estado de Terraform"
+  type        = string
+  default     = "orbidi-terraform-locks"
 }

@@ -46,7 +46,6 @@ resource "aws_autoscaling_group" "application" {
       min_healthy_percentage = 50
       skip_matching          = true
     }
-    triggers = ["launch_template"]
   }
   tag {
     key                 = "Name"
@@ -98,7 +97,7 @@ resource "aws_autoscaling_policy" "asg_policy_down" {
 #https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_metric_alarm
 resource "aws_cloudwatch_metric_alarm" "asg_cpu_alarm_down" {
   alarm_name          = "${var.name}-asg-cpu-alarm-down"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
+  comparison_operator = "LessThanThreshold"
   evaluation_periods  = "2"
   metric_name         = "CPUUtilization"
   namespace           = "AWS/EC2"

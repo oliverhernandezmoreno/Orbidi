@@ -18,10 +18,12 @@ env:
   TF_IN_AUTOMATION: true
   TF_INPUT: "false"
   TERRAFORM_VERSION: "1.16.6"
+  AWS_REGION_NAME: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'orbidi/api' }}
 
 jobs:
   # ------------------------------------------------------------------
-  # Gate sin credenciales: se ejecuta en cada PR y push a main.
+  # Gate sin credenciales: valida los dos root modules.
   # ------------------------------------------------------------------
   validate:
     name: fmt-and-validate
@@ -48,9 +50,23 @@ jobs:
       - name: Terraform Validate
         run: terraform validate -no-color
 
+      - name: Bootstrap Format
+        working-directory: bootstrap
+        run: terraform fmt -check -recursive -diff
+
+      - name: Bootstrap Init (sin backend)
+        working-directory: bootstrap
+        run: terraform init -backend=false -input=false
+
+      - name: Bootstrap Validate
+        working-directory: bootstrap
+        run: terraform validate -no-color
+
   # ------------------------------------------------------------------
-  # Plan/Apply con AWS. Solo corre si el repositorio define la variable
-  # AWS_DEPLOY_ENABLED=true y los secretos de AWS.
+  # Plan/Apply con AWS. Requiere:
+  #   - bootstrap/ aplicado (estado remoto + ECR)
+  #   - variable AWS_DEPLOY_ENABLED=true
+  #   - secretos AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
   # ------------------------------------------------------------------
   deploy:
     name: plan-apply
@@ -77,20 +93,60 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ env.AWS_REGION_NAME }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      - name: Configure backend
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          cat > backend.hcl <<EOF
+          bucket         = "orbidi-tfstate-${ACCOUNT_ID}"
+          key            = "orbidi/terraform.tfstate"
+          region         = "${AWS_REGION_NAME}"
+          dynamodb_table = "orbidi-terraform-locks"
+          encrypt        = true
+          EOF
+
       - name: Terraform Init
         id: init
-        run: terraform init -input=false
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      - name: Resolve image tag
+        id: image
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Login to ECR
+        if: github.event_name != 'pull_request'
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          aws ecr get-login-password --region "$AWS_REGION_NAME" \
+            | docker login --username AWS --password-stdin \
+                "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com"
+
+      - name: Build and push image
+        if: github.event_name != 'pull_request'
+        working-directory: .
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${ECR_REPOSITORY}:${{ steps.image.outputs.tag }}"
+          docker build -t "$IMAGE" app
+          docker push "$IMAGE"
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color -input=false -out=tfplan.binary
+        run: |
+          terraform plan -no-color -input=false \
+            -var="image_tag=${{ steps.image.outputs.tag }}" \
+            -out=tfplan.binary
 
       - name: Terraform Show (JSON)
         run: terraform show -json tfplan.binary > tfplan.json
@@ -155,5 +211,5 @@ jobs:
 
       # -------------------- Apply --------------------
       - name: Terraform Apply
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: terraform apply -input=false -auto-approve tfplan.binary

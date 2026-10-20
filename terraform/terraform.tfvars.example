@@ -1,17 +1,22 @@
-# Copiar a terraform.tfvars y ajustar los valores.
-# terraform.tfvars está en .gitignore: no versionar secretos.
+# Copiar a terraform.tfvars y ajustar. terraform.tfvars está en .gitignore.
 
 region = "us-east-1"
-# aws_profile = "default"   # opcional; null usa la cadena de credenciales por defecto
+# aws_profile = "default"
 
 name = "app-3"
 
-# Bucket de estado. Si se omite se genera "<name>-tfstate-<account_id>".
-# bucket_name = "orbidi-tfstate-123456789012"
+# Debe coincidir con bootstrap/ecr_repository_name
+ecr_repository_name = "orbidi/api"
+image_tag           = "latest"
+
+# ECS Fargate
+container_port = 8000
+task_cpu       = 256
+task_memory    = 512
+desired_count  = 2
+min_capacity   = 2
+max_capacity   = 6
 
 # DynamoDB
-table_name      = "orbidi-app"
-lock_table_name = "orbidi-terraform-locks"
-hash_key        = "id"
-
-instance_type = "t2.medium"
+table_name = "orbidi-app"
+hash_key   = "id"

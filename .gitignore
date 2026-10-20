@@ -18,3 +18,11 @@ crash.*.log
 .env
 .vscode/*
 !.vscode/settings.json
+
+# Backend local (no contiene secretos, pero es específico de cada cuenta)
+backend.hcl
+
+# Python
+__pycache__/
+*.pyc
+.venv/

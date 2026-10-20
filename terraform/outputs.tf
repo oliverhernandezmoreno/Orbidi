@@ -1,40 +1,4 @@
 # -------------------------
-# DynamoDB (aplicación)
-# -------------------------
-output "table_name" {
-  description = "Nombre de la tabla DynamoDB de la aplicación"
-  value       = aws_dynamodb_table.app_table.name
-}
-
-output "table_arn" {
-  description = "ARN de la tabla DynamoDB de la aplicación"
-  value       = aws_dynamodb_table.app_table.arn
-}
-
-output "global_secondary_indexes" {
-  description = "Índices globales secundarios creados en la tabla DynamoDB"
-  value       = aws_dynamodb_table.app_table.global_secondary_index
-}
-
-# -------------------------
-# Estado remoto de Terraform
-# -------------------------
-output "state_bucket_name" {
-  description = "Bucket S3 que almacena el estado de Terraform"
-  value       = aws_s3_bucket.terraform_state.bucket
-}
-
-output "state_bucket_arn" {
-  description = "ARN del bucket S3 de estado"
-  value       = aws_s3_bucket.terraform_state.arn
-}
-
-output "state_lock_table_name" {
-  description = "Tabla DynamoDB usada para el bloqueo del estado"
-  value       = aws_dynamodb_table.terraform_locks.name
-}
-
-# -------------------------
 # Red
 # -------------------------
 output "vpc_id" {
@@ -53,14 +17,47 @@ output "private_subnet_ids" {
 }
 
 # -------------------------
-# Cómputo y balanceo
+# Aplicación
 # -------------------------
 output "alb_dns_name" {
   description = "DNS público del Application Load Balancer"
   value       = aws_lb.front.dns_name
 }
 
-output "autoscaling_group_name" {
-  description = "Nombre del Auto Scaling Group de la aplicación"
-  value       = aws_autoscaling_group.application.name
+output "ecs_cluster_name" {
+  description = "Nombre del cluster ECS"
+  value       = aws_ecs_cluster.this.name
+}
+
+output "ecs_service_name" {
+  description = "Nombre del servicio ECS"
+  value       = aws_ecs_service.app.name
+}
+
+output "log_group_name" {
+  description = "Log group de la aplicación"
+  value       = aws_cloudwatch_log_group.app.name
+}
+
+output "ecr_repository_url" {
+  description = "URL del repositorio ECR usado por la tarea"
+  value       = data.aws_ecr_repository.app.repository_url
+}
+
+# -------------------------
+# DynamoDB
+# -------------------------
+output "table_name" {
+  description = "Nombre de la tabla DynamoDB de la aplicación"
+  value       = aws_dynamodb_table.app_table.name
+}
+
+output "table_arn" {
+  description = "ARN de la tabla DynamoDB de la aplicación"
+  value       = aws_dynamodb_table.app_table.arn
+}
+
+output "global_secondary_indexes" {
+  description = "Índices globales secundarios de la tabla"
+  value       = aws_dynamodb_table.app_table.global_secondary_index
 }

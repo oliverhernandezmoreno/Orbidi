@@ -24,7 +24,7 @@ jobs:
       - name: Checkov
         uses: bridgecrewio/checkov-action@v12
         with:
-          directory: terraform
+          directory: .
           output_format: cli,sarif
           output_file_path: console,results.sarif
           # Fase 0: no bloqueamos merges por hallazgos conocidos.

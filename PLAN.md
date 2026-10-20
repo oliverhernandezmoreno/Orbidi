@@ -8,204 +8,261 @@
 
 ## 1. Diagnóstico general
 
-La documentación describe una arquitectura razonable (VPC multi-AZ + ALB + Auto Scaling + ECR/ECS + S3/DynamoDB + CI/CD), pero **el código no coincide con ella y, en el estado inicial, no era desplegable**:
+La documentación describía una arquitectura razonable (VPC multi-AZ + ALB + Auto Scaling + ECR/ECS + S3/DynamoDB + CI/CD), pero **el código no coincidía con ella y, en el estado inicial, no era desplegable**:
 
 - 4 fallos rompían `terraform validate/apply`.
 - El pipeline ejecutaba Terraform en la raíz del repo, donde no hay archivos `.tf`.
-- No existía `user_data`: las instancias del ASG arrancaban sin aplicación.
+- No existía entrega de la aplicación: las instancias del ASG arrancaban sin código.
 - El estado era local, aunque la documentación afirmaba que era remoto.
 
-La estrategia es: **primero hacer el repo válido y reproducible**, después cerrar la brecha documentación↔código y solo entonces evolucionar (módulos, ECS/Fargate, observabilidad, entornos).
+Estado actual: **Fases 0, 1 y 2 completadas**. La infraestructura valida y la arquitectura de ejecución es ECS Fargate detrás del ALB.
 
 ---
 
 ## 2. Hallazgos
 
-### P0 — Bloqueantes (el proyecto no compila ni despliega)
+### P0 — Bloqueantes
 
 | ID | Ubicación | Problema | Estado |
 |---|---|---|---|
-| E-01 | `terraform/providers.tf:13` | `profile = aws_default_security_group.default`: `profile` espera un string y recibe un recurso. `terraform validate` fallaba siempre. | ✅ Corregido (Fase 0) |
-| E-02 | `terraform/outputs.tf:21,27,39` | Outputs referenciaban `aws_s3_bucket.app_bucket`, recurso inexistente. | ✅ Corregido (Fase 0) |
-| E-03 | `terraform/dynamodb.tf:3` + `providers.tf:55` | Dos tablas DynamoDB usaban el mismo `var.table_name`. Apply fallaba por colisión. | ✅ Corregido (Fase 0) |
-| E-04 | `.github/workflows/terraform.yml` | `init/fmt/validate/plan/apply` corrían en la raíz; los `.tf` están en `terraform/`. | ✅ Corregido (Fase 0) |
-| E-05 | `terraform/variables.tf:53,218,...` | Variables obligatorias sin default y sin `terraform.tfvars`. El `plan` fallaba. | ✅ Corregido (Fase 0) |
-| E-06 | `terraform/providers.tf` | Sin bloque `backend "s3"`: el estado era local pese a lo documentado. | ⏳ Fase 1 |
-| E-07 | `terraform/autoscaling.tf:16` | `user_data` comentado: las instancias arrancan sin aplicación. | ⏳ Fase 2 |
-| E-08 | `apps/simple-app1`, `apps/simple-app2` | Gitlinks (`160000`) sin `.gitmodules` y vacíos. No hay código de aplicación. | ⏳ Fase 2 |
+| E-01 | `terraform/providers.tf` | `profile = aws_default_security_group.default`: `profile` esperaba un string y recibía un recurso. | ✅ Fase 0 |
+| E-02 | `terraform/outputs.tf` | Outputs referenciaban `aws_s3_bucket.app_bucket`, recurso inexistente. | ✅ Fase 0 |
+| E-03 | `terraform/dynamodb.tf` + `providers.tf` | Dos tablas DynamoDB usaban el mismo `var.table_name`. | ✅ Fase 0 |
+| E-04 | `.github/workflows/terraform.yml` | Terraform corría en la raíz; los `.tf` están en `terraform/`. | ✅ Fase 0 |
+| E-05 | `terraform/variables.tf` | Variables obligatorias sin default y sin `terraform.tfvars`. | ✅ Fase 0 |
+| E-06 | `terraform/providers.tf` | Sin bloque `backend "s3"`: estado local. | ✅ Fase 1 |
+| E-07 | `terraform/autoscaling.tf` | `user_data` comentado: las instancias arrancaban sin aplicación. | ✅ Fase 2 (ECS Fargate) |
+| E-08 | `apps/simple-app1`, `apps/simple-app2` | Gitlinks (`160000`) sin `.gitmodules` y vacíos. | ✅ Fase 2 (nueva app en `app/`) |
 
-### P1 — Altas (correctitud, seguridad, costo)
+### P1 — Altas
 
 | ID | Ubicación | Problema | Estado |
 |---|---|---|---|
-| E-09 | `terraform/variables.tf:38` | AMI fijada a `amzn2-...20230727...`: formato dudoso y Amazon Linux 2 EOL (30-jun-2026). | ⏳ Fase 2 |
-| E-10 | `terraform/autoscaling.tf:84-97` | Scale-down con `GreaterThanOrEqualToThreshold` y umbral 30: se dispara casi siempre y pelea con el scale-up (70). | ✅ Corregido (Fase 0, bug trivial) |
-| E-11 | `terraform/cloudwatch.tf` vs `autoscaling.tf` | Alarmas de CPU duplicadas (por instancia y por ASG). | ⏳ Fase 4 |
-| E-12 | `terraform/loadbalancer.tf` | ALB solo HTTP:80, sin TLS/ACM/redirect. | ⏳ Fase 3 |
-| E-13 | `terraform/iamrole.tf` | El rol EC2 solo tiene `AmazonSSMManagedInstanceCore`; sin permisos a DynamoDB/S3/Secrets/Logs. | ⏳ Fase 2 |
-| E-14 | `terraform/securitygroup.tf:39-47` | Egress `0.0.0.0/0` y sin VPC Flow Logs. | ⏳ Fase 3 |
-| E-15 | `terraform/autoscaling.tf` | Sin `metadata_options` (IMDSv2) ni cifrado EBS. | ⏳ Fase 3 |
-| E-16 | `.github/workflows/terraform.yml` | `plan` con `continue-on-error` y `apply` que no consumía el plan; apply sin gate. | ✅ Mitigado (Fase 0) / cierre en Fase 5 |
-| E-17 | `.github/workflows/terraform.yml:45` | Región hardcodeada `us-east-2` vs `var.region = us-east-1`. | ✅ Corregido (Fase 0) |
-| E-18 | `.github/workflows/*.yml` | Credenciales estáticas en vez de OIDC; actions obsoletas (`checkout@v3`, `configure-aws-credentials@v1`, `upload-sarif@v2` deprecada). | 🟡 Parcial (Fase 0 actualiza versiones) / OIDC en Fase 3 |
+| E-09 | `terraform/variables.tf` | AMI de 2023 y Amazon Linux 2 EOL. | ✅ Fase 2 (sin EC2) |
+| E-10 | `terraform/autoscaling.tf` | Scale-down con `GreaterThanOrEqualToThreshold`. | ✅ Fase 0 |
+| E-11 | `terraform/cloudwatch.tf` | Alarmas de CPU duplicadas. | ✅ Fase 2 (target tracking único) |
+| E-12 | `terraform/loadbalancer.tf` | ALB solo HTTP:80, sin TLS/ACM. | ⏳ Fase 3 |
+| E-13 | `terraform/iamrole.tf` | Rol EC2 sin permisos de aplicación. | ✅ Fase 2 (roles de ejecución y tarea) |
+| E-14 | `terraform/securitygroup.tf` | Egress amplio y sin VPC Flow Logs. | ⏳ Fase 3 |
+| E-15 | `terraform/autoscaling.tf` | Sin IMDSv2 ni cifrado EBS. | ✅ Fase 2 (Fargate) |
+| E-16 | `.github/workflows/terraform.yml` | `apply` no consumía el plan; sin gate. | ✅ Fases 0–1 |
+| E-17 | `.github/workflows/terraform.yml` | Región hardcodeada distinta de `var.region`. | ✅ Fase 0 |
+| E-18 | `.github/workflows/*.yml` | Credenciales estáticas; actions obsoletas. | 🟡 Versiones ✅ / OIDC ⏳ Fase 3 |
 
-### P2 — Medias (costo, mantenibilidad, operación)
+### P2 — Medias
 
 | ID | Problema | Estado |
 |---|---|---|
-| E-19 | 3 NAT Gateways (uno por subred pública) vs 2 documentados; sin VPC Endpoints. | ⏳ Fase 6 |
-| E-20 | DynamoDB sin PITR, SSE, deletion protection ni TTL. | ⏳ Fase 3 |
-| E-21 | Bucket de estado sin lifecycle ni ownership controls. | ⏳ Fase 1 |
-| E-22 | `health_check_grace_period = 480`. | ⏳ Fase 2 |
-| E-23 | Valores hardcodeados: puerto 80, path `/`, min/max/desired, umbrales. | ⏳ Fase 2 |
-| E-24 | Sin `required_version` y `.gitignore` excluía `*.lock.hcl`. | ✅ Corregido (Fase 0) |
-| E-25 | Tags incompletos. | ⏳ Fase 6 |
-| E-26 | `.gitignore` con `*.exe.` (typo). | ✅ Corregido (Fase 0) |
-| E-27 | Sin `tflint`, tests ni gates de seguridad. | ⏳ Fase 5 |
-| E-28 | Sin log groups, dashboards ni alarmas de 5xx/latencia/UnhealthyHostCount. | ⏳ Fase 4 |
-| E-29 | CI se disparaba dos veces en PR y `branches: ['*']` no matchea ramas con `/`. | ✅ Corregido (Fase 0) |
+| E-19 | 3 NAT Gateways; sin VPC Endpoints. | ⏳ Fase 6 |
+| E-20 | DynamoDB sin PITR, SSE ni deletion protection. | 🟡 PITR en locks (Fase 1); tabla de app ⏳ Fase 3 |
+| E-21 | Bucket de estado sin lifecycle. | ✅ Fase 1 (versioning, SSE, ownership, public block) |
+| E-22 | `health_check_grace_period = 480`. | ✅ Fase 2 (60s) |
+| E-23 | Valores hardcodeados: puerto, path, capacidades, umbrales. | ✅ Fase 2 (variables) |
+| E-24 | Sin `required_version` y lockfile ignorado. | ✅ Fase 0 |
+| E-25 | Tags incompletos. | 🟡 `Project`/`Layer` agregados; CostCenter ⏳ Fase 6 |
+| E-26 | `.gitignore` con `*.exe.`. | ✅ Fase 0 |
+| E-27 | Sin `tflint` ni tests. | ⏳ Fase 5 |
+| E-28 | Sin logs, dashboards ni alarmas de 5xx. | 🟡 Log group + 3 alarmas; dashboard ⏳ Fase 4 |
+| E-29 | CI duplicado en PR; `branches: ['*']`. | ✅ Fase 0 |
 
 ### Documentación
 
 | ID | Problema | Estado |
 |---|---|---|
-| D-01 | `README.md` de 4 líneas, sin quickstart, variables, outputs ni destroy. | ⏳ Fase 7 (docs) |
-| D-02 | `design.md` contradice el código: "cuatro subnets" (son 6), "dos NAT" (son 3), "ECS/EKS + ECR" (es EC2 ASG), "módulos" (no hay), Secrets Manager y backups S3 inexistentes. | ⏳ Fase 7 (docs) |
-| D-03 | Erratas: "Desiciones", "Elelgi", "incluiran". | ⏳ Fase 7 (docs) |
-| D-04 | La imagen del diagrama apunta a una URL externa de GitHub en vez del asset local `Orbidi.jpg`. | ⏳ Fase 7 (docs) |
-| D-05 | No se documenta el modelo de estado real ni el bootstrap. | ⏳ Fase 1 / 7 |
+| D-01 | `README.md` de 4 líneas. | ⏳ Fase 7 |
+| D-02 | `design.md` contradice el código (ECS/EKS, 4 subnets, 2 NAT, módulos). | ⏳ Fase 7 |
+| D-03 | Erratas. | ⏳ Fase 7 |
+| D-04 | Diagrama apunta a una URL externa. | ⏳ Fase 7 |
+| D-05 | Modelo de estado no documentado. | 🟡 Este documento; README en Fase 7 |
 
 ---
 
-## 3. Plan de ejecución por fases
+## 3. Arquitectura actual (tras Fase 2)
 
-### Fase 0 — Desbloqueo ✅ (esta rama)
+```
+Internet
+   │ 80
+   ▼
+ALB (público, 3 AZ)  ──► Target Group (ip:8000, health /health)
+   │
+   ▼
+ECS Fargate Service (2–6 tareas, target tracking CPU 70%)
+   │                         │
+   │                         ├── CloudWatch Logs /ecs/app-3
+   │                         └── DynamoDB orbidi-app (rol de tarea)
+   ▼
+Subredes privadas (3 AZ) ──► NAT Gateway ──► ECR / APIs AWS
+```
 
-Objetivo: que `terraform validate` y `terraform plan` sean ejecutables y que CI valide de verdad.
+Recursos gestionados:
 
-- [x] E-01 quitar `profile = aws_default_security_group.default`; perfil opcional vía `var.aws_profile`.
-- [x] E-02 reemplazar outputs de `app_bucket` por outputs reales (VPC, subredes, ALB, ASG, estado).
-- [x] E-03 separar `var.table_name` (aplicación) de `var.lock_table_name` (bloqueo de estado).
-- [x] E-05 defaults seguros + `terraform.tfvars.example`; `instance_id` deja de ser obligatoria.
-- [x] E-04 `working-directory: terraform` y `-backend=false` para validar sin credenciales.
-- [x] E-24 `versions.tf` con `required_version` y `.terraform.lock.hcl` versionado.
-- [x] E-26 corregir `.gitignore`.
-- [x] E-10 corregir la alarma de scale-down.
-- [x] E-17 región unificada y parametrizada.
-- [x] E-29 triggers de CI sin duplicados.
-- [x] Mover los recursos de estado a `terraform/state.tf` (mismo address, sin cambio de plan).
-- [x] Implementar `global_secondary_index` en DynamoDB para que el output/variable sean reales.
-- [x] Actualizar actions obsoletas a versiones soportadas.
+| Root module | Recursos |
+|---|---|
+| `bootstrap/` (estado local) | Bucket S3 de estado, tabla DynamoDB de locks, repositorio ECR + lifecycle policy |
+| `terraform/` (estado remoto) | VPC, 6 subredes, IGW, 3 NAT, ALB, target group, ECS cluster/servicio/task definition, IAM, DynamoDB de app, log group, alarmas |
 
-**DoD:** `fmt`, `validate` y `plan` en verde; PR valida sin credenciales de AWS.
+Decisiones:
 
-> Nota: si ya existiera estado remoto con la tabla de locks creada, E-03 requiere un bloque `moved`. En este repo no hay estado remoto todavía.
+- **ECS Fargate** en lugar de EC2 + ASG: elimina parcheo de AMI, `user_data` y capacidad ociosa.
+- **ECR en `bootstrap/`**: rompe el ciclo “la imagen necesita el repo y el servicio necesita la imagen”.
+- **Tag de imagen por commit** (`github.sha`) en CI: cada despliegue crea una revisión nueva de la task definition.
+- **Estado remoto con bloqueo DynamoDB**, inicializado con `-backend-config`.
 
-### Fase 1 — Estado remoto y bootstrap ⏳
+---
 
-- [ ] Crear `bootstrap/` (estado local propio) que genere bucket S3 + tabla de locks.
-- [ ] Añadir `backend "s3"` con `encrypt = true` y `use_lockfile = true` (Terraform ≥ 1.10) o DynamoDB.
-- [ ] `prevent_destroy`, versioning, SSE, public access block y lifecycle en el bucket.
-- **DoD:** dos operadores pueden aplicar en paralelo sin corromper el estado.
+## 4. Plan de ejecución por fases
 
-### Fase 2 — Que la aplicación realmente corra ⏳
+### Fase 0 — Desbloqueo ✅
 
-Decisión pendiente (recomendación: **Opción A**):
+- [x] Corregir provider, outputs, colisión de tablas y variables.
+- [x] CI en `terraform/`, validación sin credenciales.
+- [x] `versions.tf` y lockfile versionado.
 
-- **Opción A:** ECS Fargate + ECR + ALB. Elimina parcheo de AMI y capacidad ociosa; alinea el código con `design.md`.
-- **Opción B:** mantener ASG con AL2023 (SSM parameter), `user_data` con Docker + ECR pull + systemd.
+### Fase 1 — Estado remoto y bootstrap ✅
 
-- [ ] E-07/E-09 resolver entrega de la aplicación.
-- [ ] E-08 resolver `apps/` (submódulos reales o mover el código al monorepo).
-- [ ] E-13 permisos IAM mínimos (ECR, Logs, DynamoDB/S3/Secrets).
-- [ ] E-22/E-23 parametrizar grace period, puertos, paths y capacidades.
-- **DoD:** `curl` al ALB devuelve 200 y `HealthyHostCount = desired`.
+- [x] `bootstrap/` con su propio estado local.
+- [x] Bucket S3: versioning, SSE, ownership controls y public access block.
+- [x] Tabla DynamoDB de locks con PITR.
+- [x] `backend "s3"` parcial en `terraform/backend.tf` + `backend.hcl.example`.
+- [x] CI genera `backend.hcl` desde `aws sts get-caller-identity`.
+
+**DoD:** dos operadores pueden aplicar en paralelo sin corromper el estado.
+
+### Fase 2 — Aplicación en ECS Fargate ✅
+
+- [x] App FastAPI mínima en `app/` (`/` y `/health`) con Dockerfile no-root.
+- [x] ECR en bootstrap + build/push desde CI con tag por commit.
+- [x] ECS cluster con Container Insights, task definition Fargate, logs y health check.
+- [x] Servicio con deployment circuit breaker y target tracking de CPU.
+- [x] ALB → target group `ip:8000` con health check `/health`.
+- [x] Roles IAM separados (ejecución y tarea) con permisos mínimos a DynamoDB.
+- [x] Alarmas de CPU, 5xx y hosts no saludables.
+
+**DoD:** `curl http://<alb_dns>/health` devuelve 200 y el servicio alcanza estado estable.
 
 ### Fase 3 — Seguridad ⏳
 
-- [ ] E-18 OIDC GitHub→AWS, eliminar access keys.
-- [ ] E-12 HTTPS con ACM + redirect 80→443.
-- [ ] E-15 IMDSv2 obligatorio + EBS cifrado (KMS).
-- [ ] E-14 restringir egress y habilitar Flow Logs.
-- [ ] E-20 KMS/SSE, PITR y deletion protection en DynamoDB.
+- [ ] OIDC GitHub→AWS y eliminación de access keys.
+- [ ] HTTPS con ACM + redirect 80→443, HSTS.
+- [ ] Restringir egress de las tareas y habilitar VPC Flow Logs.
+- [ ] KMS/SSE, deletion protection y PITR en la tabla de aplicación.
 - [ ] Secretos en Secrets Manager/SSM.
 - [ ] Checkov con `soft_fail: false` + baseline, `tflint`, `trivy`.
-- **DoD:** 0 hallazgos críticos/altos sin justificar.
 
-### Fase 4 — Observabilidad y operación ⏳
+### Fase 4 — Observabilidad ⏳
 
-- [ ] E-28 log groups, dashboard (p95, 5xx, CPU, healthy hosts).
-- [ ] E-11 unificar alarmas (target tracking) + SNS.
-- [ ] Alarmas de `UnhealthyHostCount`, `TargetResponseTime`, `HTTPCode_ELB_5XX`.
+- [ ] Dashboard (p50/p95/p99, 5xx, CPU/memoria, tareas saludables).
+- [ ] Alarmas de latencia y de tareas en ejecución por debajo de `desired_count`.
+- [ ] SNS para notificaciones.
 - [ ] Runbook: alarmas, rollback, escala manual.
-- **DoD:** matar una instancia/tarea genera alarma y el sistema se recupera solo.
 
 ### Fase 5 — CI/CD maduro ⏳
 
-- [ ] E-16 `apply` del plan generado, solo en `main` y con aprobación.
-- [ ] Separar `pr-validate` y `deploy` (workflow_dispatch + environment).
-- [ ] `concurrency` para evitar applies simultáneos.
-- [ ] E-27 `terraform test`/Terratest + smoke test post-deploy.
-- [ ] Infracost estable (hoy opcional y gated).
-- **DoD:** no se puede aplicar sin PR aprobado; plan y apply idénticos.
+- [ ] `terraform test` / Terratest y smoke test post-deploy.
+- [ ] Required reviewers en el environment `production`.
+- [ ] Infracost estable.
+- [ ] `tflint` y `trivy` como gates.
 
 ### Fase 6 — Evolución ⏳
 
-- [ ] E-19 VPC Endpoints (S3 gateway + ECR/SSM) y 1–2 NAT por entorno.
-- [ ] Extraer módulos: `network`, `alb`, `compute`, `data`, `observability`.
+- [ ] VPC Endpoints (S3 gateway, ECR/SSM) y 1–2 NAT por entorno.
+- [ ] Extraer módulos: `network`, `alb`, `ecs`, `data`, `observability`.
 - [ ] Entornos `dev/staging/prod` con states separados.
-- [ ] E-25 tagging obligatorio + AWS Budgets.
+- [ ] Tagging obligatorio, AWS Budgets y alarmas de costo.
 - [ ] Backups/DR con RPO/RTO y restore probado.
-- [ ] Graviton/Spot y Savings Plans.
+- [ ] Graviton (ARM64) y Savings Plans.
 
 ### Fase 7 — Documentación ⏳
 
-- [ ] Reescribir `README.md`: badges, diagrama (Mermaid + `Orbidi.jpg` local), quickstart, variables/outputs, CI/CD, operación, costos, troubleshooting.
-- [ ] Evolucionar `design.md` a ADR: estado actual vs objetivo, tabla de brechas y decisiones con consecuencias.
-- [ ] Generar tablas de variables/outputs con `terraform-docs`.
-- **DoD:** la documentación describe exactamente lo que el código despliega.
+- [ ] Reescribir `README.md` con quickstart, variables/outputs, CI/CD, operación y troubleshooting.
+- [ ] Evolucionar `design.md` a ADR con estado actual vs objetivo.
+- [ ] Generar tablas con `terraform-docs`.
 
 ---
 
-## 4. Verificación local
+## 5. Bootstrap y primer despliegue
 
 ```bash
+# 1) Crear backend y ECR (una sola vez, estado local)
+cd bootstrap
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform apply
+
+# 2) Configurar el backend del root module principal
+cd ../terraform
+cp backend.hcl.example backend.hcl
+# editar bucket con el account id real
+terraform init -backend-config=backend.hcl
+
+# 3) Construir y publicar la imagen
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+aws ecr get-login-password --region us-east-1 \
+  | docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
+docker build -t "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/orbidi/api:latest" ../app
+docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/orbidi/api:latest"
+
+# 4) Desplegar
+cp terraform.tfvars.example terraform.tfvars
+terraform plan -out=tfplan.binary
+terraform apply tfplan.binary
+
+# 5) Verificar
+terraform output -raw alb_dns_name   # curl http://<dns>/health
+```
+
+> El backend remoto usa los mismos nombres por defecto que `bootstrap/`:
+> `orbidi-tfstate-<account_id>`, `orbidi-terraform-locks` y `orbidi/api`.
+> Si se cambian, ajustar `backend.hcl`, `ECR_REPOSITORY` y `ecr_repository_name`.
+
+## 6. Variables y secretos de CI
+
+| Tipo | Nombre | Uso |
+|---|---|---|
+| Variable | `AWS_DEPLOY_ENABLED=true` | Habilita el job `deploy`. |
+| Variable | `AWS_REGION` | Región de despliegue (fallback `us-east-1`). |
+| Variable | `ECR_REPOSITORY` | Repositorio ECR (fallback `orbidi/api`). |
+| Variable | `INFRACOST_SCAN_TYPE` | Opcional; activa Infracost. |
+| Secret | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Credenciales hasta migrar a OIDC (Fase 3). |
+| Secret | `INFRACOST_API_KEY` | Opcional. |
+
+> El job `validate` no necesita credenciales: valida `terraform/` y `bootstrap/` en cada PR.
+>
+> ⚠️ `AWS_DEPLOY_ENABLED=true` solo debe definirse **después** de aplicar `bootstrap/`.
+
+---
+
+## 7. Verificación local
+
+```bash
+# Root module principal
 cd terraform
 terraform fmt -check -recursive -diff
 terraform init -backend=false
 terraform validate
-# Requiere credenciales AWS:
-terraform plan -var-file=terraform.tfvars
+
+# Bootstrap
+cd ../bootstrap
+terraform fmt -check -recursive -diff
+terraform init -backend=false
+terraform validate
 ```
 
-Si no hay credenciales, `fmt` + `init -backend=false` + `validate` son suficientes para el gate de Fase 0.
-
-### Variables y secretos de CI
-
-| Tipo | Nombre | Uso |
-|---|---|---|
-| Variable | `AWS_DEPLOY_ENABLED=true` | Habilita el job `deploy` (plan/apply). Sin ella el pipeline solo valida. |
-| Variable | `AWS_REGION` | Región de despliegue (fallback `us-east-1`). |
-| Variable | `INFRACOST_SCAN_TYPE` | Opcional; activa Infracost (`tf_plan`). |
-| Secret | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Credenciales temporales hasta migrar a OIDC (Fase 3). |
-| Secret | `INFRACOST_API_KEY` | Opcional. |
-
-> El job `validate` no necesita credenciales: corre `fmt`, `init -backend=false` y `validate` en cada PR.
->
-> ⚠️ **No definir `AWS_DEPLOY_ENABLED=true` hasta completar la Fase 1.** Sin backend remoto, cada ejecución de CI parte de un estado vacío y volvería a intentar crear los mismos recursos.
+Sin credenciales, `fmt` + `init -backend=false` + `validate` son el gate mínimo.
 
 ---
 
-## 5. Ruta crítica y esfuerzo
+## 8. Ruta crítica y esfuerzo
 
 | Fase | Esfuerzo | Riesgo si se omite |
 |---|---|---|
 | 0 Desbloqueo | 1–2 d | Nada compila; CI da falsa confianza |
 | 1 Estado remoto | 1 d | Pérdida/corrupción de estado |
-| 2 App funcionando | 3–5 d | Infra "verde" pero sin servicio real |
+| 2 App funcionando | 3–5 d | Infra “verde” pero sin servicio real |
 | 3 Seguridad | 2–3 d | HTTP en claro, credenciales e IMDSv1 |
 | 4 Observabilidad | 2–3 d | Fallos invisibles, MTTR alto |
 | 5 CI/CD maduro | 2 d | Deploys sin control |
 | 6 Evolución | continuo | Deuda técnica y costo |
+| 7 Documentación | 1–2 d | Brecha docs↔código |
 
-**Ruta crítica:** Fase 0 → Fase 1 → Fase 2.
+**Ruta crítica:** Fase 3 (seguridad) antes de exponer el servicio a producción.

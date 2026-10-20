@@ -1,206 +1,222 @@
-#Define AWS Region
+# -------------------------
+# General
+# -------------------------
 variable "region" {
   description = "Infrastructure region"
   type        = string
   default     = "us-east-1"
 }
-#Define IAM User Access Key
-variable "access_key" {
-  description = "The access_key that belongs to the IAM user"
+
+variable "aws_profile" {
+  description = "Perfil de la AWS CLI a usar. Null usa la cadena de credenciales por defecto."
   type        = string
-  sensitive   = true
-  #default     = ""
+  default     = null
 }
-#Define IAM User Secret Key
-variable "secret_key" {
-  description = "The secret_key that belongs to the IAM user"
-  type        = string
-  sensitive   = true
-  #default     = ""
-}
-variable "vpc_cidr" {
-  description = "the vpc cidr"
-  default     = "10.20.30.0/24"
-}
-variable "subnet_cidr_private" {
-  description = "cidr blocks for the private subnets"
-  default     = ["10.20.30.0/27", "10.20.30.32/27", "10.20.30.64/27"]
-  type        = list(any)
-}
-variable "subnet_cidr_public" {
-  description = "cidr blocks for the public subnets"
-  default     = ["10.20.30.96/27", "10.20.30.128/27", "10.20.30.160/27"]
-  type        = list(any)
-}
-variable "ami_name" {
-  description = "The ami name of the image from where the instances will be created"
-  default     = ["amzn2-ami-amd-hvm-2.0.20230727.0-x86_64-gp2"]
-  type        = list(string)
-}
-variable "instance_type" {
-  
-  description = "The instance type of the EC2 instances"
-  default     = "t2.medium"
-  type        = string
-}
+
 variable "name" {
-  description = "The name of the application."
+  description = "Nombre base de la aplicación y de sus recursos"
   type        = string
   default     = "app-3"
 }
 
-# Identificador de la instancia de EC2
-variable "instance_id" {
-  description = "ID de la instancia EC2 para la alarma de CPU"
+variable "environment" {
+  description = "Entorno lógico (dev, staging, prod)"
   type        = string
+  default     = "dev"
 }
 
-# Umbral de CPU para activar la alarma
-variable "cpu_threshold" {
-  description = "Umbral de CPU para la alarma"
-  type        = number
-  default     = 80
-}
-
-# Activar alarma de CPU
-variable "enable_cpu_alarm" {
-  description = "Activar alarma de CloudWatch para la utilización de CPU"
-  type        = bool
-  default     = true
-}
-
-# Nombre del balanceador de carga (ALB)
-variable "alb_name" {
-  description = "Nombre del balanceador de carga para la alarma de hosts saludables"
+# -------------------------
+# Red
+# -------------------------
+variable "vpc_cidr" {
+  description = "CIDR de la VPC"
   type        = string
-  default     = ""
+  default     = "10.20.30.0/24"
 }
 
-# Umbral de hosts saludables para el ALB
-variable "alb_threshold" {
-  description = "Umbral de conteo de hosts saludables para el ALB"
-  type        = number
-  default     = 1
+variable "subnet_cidr_private" {
+  description = "CIDR de las subredes privadas"
+  type        = list(string)
+  default     = ["10.20.30.0/27", "10.20.30.32/27", "10.20.30.64/27"]
 }
 
-# Activar alarma para ALB
-variable "enable_alb_alarm" {
-  description = "Activar alarma de CloudWatch para el ALB"
-  type        = bool
-  default     = false
+variable "subnet_cidr_public" {
+  description = "CIDR de las subredes públicas"
+  type        = list(string)
+  default     = ["10.20.30.96/27", "10.20.30.128/27", "10.20.30.160/27"]
 }
 
-# Prefijo del nombre para las alarmas
-variable "alarm_name_prefix" {
-  description = "Prefijo para los nombres de las alarmas"
+# -------------------------
+# Contenedor / ECS
+# -------------------------
+variable "ecr_repository_name" {
+  description = "Repositorio ECR creado por bootstrap/"
   type        = string
-  default     = "app"
+  default     = "orbidi/api"
 }
 
-# Período de tiempo en segundos para la métrica de CloudWatch
-variable "alarm_period" {
-  description = "Período de tiempo en segundos para las métricas de CloudWatch"
+variable "image_tag" {
+  description = "Tag de la imagen a desplegar"
+  type        = string
+  default     = "latest"
+}
+
+variable "container_port" {
+  description = "Puerto que expone el contenedor"
   type        = number
-  default     = 300
+  default     = 8000
 }
 
-# Períodos de evaluación necesarios para activar la alarma
-variable "evaluation_periods" {
-  description = "Número de períodos de evaluación para activar la alarma"
+variable "task_cpu" {
+  description = "CPU de la tarea Fargate (unidades de 1024 = 1 vCPU)"
+  type        = number
+  default     = 256
+}
+
+variable "task_memory" {
+  description = "Memoria de la tarea Fargate en MiB"
+  type        = number
+  default     = 512
+}
+
+variable "desired_count" {
+  description = "Número inicial de tareas"
   type        = number
   default     = 2
 }
 
-# Acciones a ejecutar cuando la alarma está activa
-variable "alarm_actions" {
-  description = "Acciones de SNS u otros recursos a ejecutar cuando la alarma esté activa"
-  type        = list(string)
-  default     = []
+variable "min_capacity" {
+  description = "Mínimo de tareas para el auto scaling"
+  type        = number
+  default     = 2
 }
 
-# Acciones a ejecutar cuando la alarma vuelva al estado OK
-variable "ok_actions" {
-  description = "Acciones de SNS u otros recursos a ejecutar cuando la alarma esté en estado OK"
-  type        = list(string)
-  default     = []
+variable "max_capacity" {
+  description = "Máximo de tareas para el auto scaling"
+  type        = number
+  default     = 6
 }
 
-
-# Nombre del bucket S3
-variable "bucket_name" {
-  description = "orbidi-bucket"
-  type        = string
+variable "log_retention_days" {
+  description = "Retención de logs en CloudWatch"
+  type        = number
+  default     = 30
 }
 
-# ACL del bucket S3
-variable "bucket_acl" {
-  description = "Control de acceso para el bucket S3"
-  type        = string
-  default     = "private"
-}
-
-# Activar versionado en el bucket
-variable "enable_versioning" {
-  description = "Activar versionado en el bucket S3"
-  type        = bool
-  default     = false
-}
-# Etiquetas para el bucket
-variable "tags" {
-  description = "Etiquetas aplicadas al bucket S3"
-  type        = map(string)
-  default     = {}
-}
-
-# Clave de partición (hash) de la tabla
-variable "hash_key" {
-  description = "Clave de partición (hash) de la tabla"
-  type        = string
-}
-
-# Tipo de dato de la clave de partición (S para String, N para Number, B para Binary)
-variable "hash_key_type" {
-  description = "Tipo de dato de la clave de partición (hash)"
-  type        = string
-  default     = "S"
-}
-
-# Clave de ordenación (rango) de la tabla (opcional)
-variable "range_key" {
-  description = "Clave de ordenación (rango) de la tabla"
+variable "certificate_arn" {
+  description = "ARN del certificado ACM para habilitar HTTPS. Vacío deja solo HTTP."
   type        = string
   default     = ""
 }
 
-# Tipo de dato de la clave de ordenación (rango) (S para String, N para Number, B para Binary)
-variable "range_key_type" {
-  description = "Tipo de dato de la clave de ordenación (rango)"
+variable "app_secrets" {
+  description = "Mapa variable de entorno -> ARN de Secrets Manager/SSM para inyectar en la tarea"
+  type        = map(string)
+  default     = {}
+}
+
+variable "enable_deletion_protection" {
+  description = "Activa deletion protection en DynamoDB y ALB (recomendado en prod)"
+  type        = bool
+  default     = false
+}
+
+# -------------------------
+# Alarmas
+# -------------------------
+variable "cpu_threshold" {
+  description = "Umbral de CPU para alarmas y target tracking"
+  type        = number
+  default     = 70
+}
+
+variable "alarm_period" {
+  description = "Período de las métricas de CloudWatch en segundos"
+  type        = number
+  default     = 300
+}
+
+variable "evaluation_periods" {
+  description = "Períodos de evaluación para activar una alarma"
+  type        = number
+  default     = 2
+}
+
+variable "alarm_actions" {
+  description = "ARNs (por ejemplo SNS) a notificar cuando la alarma se activa"
+  type        = list(string)
+  default     = []
+}
+
+variable "ok_actions" {
+  description = "ARNs a notificar cuando la alarma vuelve a OK"
+  type        = list(string)
+  default     = []
+}
+
+variable "alarm_email" {
+  description = "Email para suscribir al topic SNS de alarmas. Vacío no crea suscripción."
+  type        = string
+  default     = ""
+}
+
+variable "latency_threshold_ms" {
+  description = "Umbral de latencia p95 del ALB en milisegundos"
+  type        = number
+  default     = 1000
+}
+
+# -------------------------
+# DynamoDB
+# -------------------------
+variable "table_name" {
+  description = "Nombre de la tabla DynamoDB de la aplicación"
+  type        = string
+  default     = "orbidi-app"
+}
+
+variable "hash_key" {
+  description = "Clave de partición (hash) de la tabla"
+  type        = string
+  default     = "id"
+}
+
+variable "hash_key_type" {
+  description = "Tipo de la clave de partición (S, N o B)"
   type        = string
   default     = "S"
 }
 
-# Modo de facturación: PAY_PER_REQUEST o PROVISIONED
+variable "range_key" {
+  description = "Clave de ordenación (rango) opcional"
+  type        = string
+  default     = ""
+}
+
+variable "range_key_type" {
+  description = "Tipo de la clave de ordenación (S, N o B)"
+  type        = string
+  default     = "S"
+}
+
 variable "billing_mode" {
   description = "Modo de facturación: PAY_PER_REQUEST o PROVISIONED"
   type        = string
   default     = "PAY_PER_REQUEST"
 }
 
-# Capacidad de lectura (solo aplicable si billing_mode es PROVISIONED)
 variable "read_capacity" {
-  description = "Capacidad de lectura para la tabla DynamoDB (si billing_mode es PROVISIONED)"
+  description = "Capacidad de lectura si billing_mode es PROVISIONED"
   type        = number
   default     = 5
 }
 
-# Capacidad de escritura (solo aplicable si billing_mode es PROVISIONED)
 variable "write_capacity" {
-  description = "Capacidad de escritura para la tabla DynamoDB (si billing_mode es PROVISIONED)"
+  description = "Capacidad de escritura si billing_mode es PROVISIONED"
   type        = number
   default     = 5
 }
 
-# Configuración de índices globales secundarios (opcional)
 variable "global_secondary_indexes" {
   description = "Configuración de índices globales secundarios"
   type = list(object({
@@ -213,9 +229,4 @@ variable "global_secondary_indexes" {
     non_key_attributes = optional(list(string))
   }))
   default = []
-}
-
-variable "table_name" {
-  description = "Name of DynamoDB table for state locking"
-  type        = string
 }

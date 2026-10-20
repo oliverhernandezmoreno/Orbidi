@@ -1,39 +1,123 @@
-# Alarma de CloudWatch para la utilización de CPU en instancias EC2
-resource "aws_cloudwatch_metric_alarm" "cpu_utilization_alarm" {
-  count               = var.enable_cpu_alarm ? 1 : 0
-  alarm_name          = "${var.alarm_name_prefix}-cpu-utilization"
+# CPU del servicio ECS
+resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
+  alarm_name          = "${var.name}-ecs-cpu-high"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = var.evaluation_periods
   metric_name         = "CPUUtilization"
-  namespace           = "AWS/EC2"
+  namespace           = "AWS/ECS"
   period              = var.alarm_period
   statistic           = "Average"
   threshold           = var.cpu_threshold
-  alarm_description   = "Alarma de CloudWatch cuando la CPU sobrepasa el umbral definido"
-  actions_enabled     = true
-  alarm_actions       = var.alarm_actions
-  ok_actions          = var.ok_actions
+  alarm_description   = "CPU promedio del servicio ECS por encima del umbral"
+  alarm_actions       = local.effective_alarm_actions
+  ok_actions          = local.effective_ok_actions
+  treat_missing_data  = "notBreaching"
+
   dimensions = {
-    InstanceId = var.instance_id
+    ClusterName = aws_ecs_cluster.this.name
+    ServiceName = aws_ecs_service.app.name
   }
 }
 
-# Alarma de CloudWatch para el balanceador de carga (ejemplo)
-resource "aws_cloudwatch_metric_alarm" "alb_healthy_host_count" {
-  count               = var.enable_alb_alarm ? 1 : 0
-  alarm_name          = "${var.alarm_name_prefix}-alb-healthy-hosts"
-  comparison_operator = "LessThanThreshold"
+# Memoria del servicio ECS
+resource "aws_cloudwatch_metric_alarm" "ecs_memory_high" {
+  alarm_name          = "${var.name}-ecs-memory-high"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = var.evaluation_periods
-  metric_name         = "HealthyHostCount"
+  metric_name         = "MemoryUtilization"
+  namespace           = "AWS/ECS"
+  period              = var.alarm_period
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "Memoria promedio del servicio ECS por encima del 80%"
+  alarm_actions       = local.effective_alarm_actions
+  ok_actions          = local.effective_ok_actions
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ClusterName = aws_ecs_cluster.this.name
+    ServiceName = aws_ecs_service.app.name
+  }
+}
+
+# Errores 5xx generados por el ALB
+resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
+  alarm_name          = "${var.name}-alb-5xx"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = var.evaluation_periods
+  metric_name         = "HTTPCode_ELB_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = var.alarm_period
+  statistic           = "Sum"
+  threshold           = 1
+  alarm_description   = "El ALB está devolviendo errores 5xx"
+  alarm_actions       = local.effective_alarm_actions
+  ok_actions          = local.effective_ok_actions
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    LoadBalancer = aws_lb.front.arn_suffix
+  }
+}
+
+# Tareas no saludables detrás del target group
+resource "aws_cloudwatch_metric_alarm" "unhealthy_hosts" {
+  alarm_name          = "${var.name}-unhealthy-hosts"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = var.evaluation_periods
+  metric_name         = "UnHealthyHostCount"
   namespace           = "AWS/ApplicationELB"
   period              = var.alarm_period
   statistic           = "Average"
-  threshold           = var.alb_threshold
-  alarm_description   = "Alarma de CloudWatch cuando el conteo de hosts saludables cae por debajo del umbral"
-  actions_enabled     = true
-  alarm_actions       = var.alarm_actions
-  ok_actions          = var.ok_actions
+  threshold           = 0
+  alarm_description   = "Hay tareas ECS no saludables en el target group"
+  alarm_actions       = local.effective_alarm_actions
+  ok_actions          = local.effective_ok_actions
+  treat_missing_data  = "notBreaching"
+
   dimensions = {
-    LoadBalancer = var.alb_name
+    LoadBalancer = aws_lb.front.arn_suffix
+    TargetGroup  = aws_lb_target_group.front.arn_suffix
+  }
+}
+
+# Latencia p95 del ALB
+resource "aws_cloudwatch_metric_alarm" "latency_p95" {
+  alarm_name          = "${var.name}-latency-p95"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = var.evaluation_periods
+  metric_name         = "TargetResponseTime"
+  namespace           = "AWS/ApplicationELB"
+  period              = var.alarm_period
+  extended_statistic  = "p95"
+  threshold           = var.latency_threshold_ms / 1000
+  alarm_description   = "Latencia p95 por encima del umbral configurado"
+  alarm_actions       = local.effective_alarm_actions
+  ok_actions          = local.effective_ok_actions
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    LoadBalancer = aws_lb.front.arn_suffix
+  }
+}
+
+# Tareas en ejecución por debajo del mínimo esperado
+resource "aws_cloudwatch_metric_alarm" "running_tasks_low" {
+  alarm_name          = "${var.name}-running-tasks-low"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = var.evaluation_periods
+  metric_name         = "RunningTaskCount"
+  namespace           = "ECS/ContainerInsights"
+  period              = var.alarm_period
+  statistic           = "Average"
+  threshold           = var.min_capacity
+  alarm_description   = "Menos tareas en ejecución de las esperadas"
+  alarm_actions       = local.effective_alarm_actions
+  ok_actions          = local.effective_ok_actions
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ClusterName = aws_ecs_cluster.this.name
+    ServiceName = aws_ecs_service.app.name
   }
 }

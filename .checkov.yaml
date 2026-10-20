@@ -1,0 +1,32 @@
+# Baseline de Checkov.
+#
+# Cada exclusión debe tener una justificación y un plan de cierre.
+# Objetivo: reducir esta lista a cero en la Fase 6.
+skip-check:
+  # WAF: se evaluará junto con la decisión de dominio/CDN (Fase 6).
+  - CKV2_AWS_28
+  # Notificaciones de eventos en el bucket de estado: no aplican.
+  - CKV2_AWS_62
+  # Cifrado con CMK: hoy se usa la clave gestionada por AWS.
+  - CKV_AWS_119
+  - CKV_AWS_136
+  - CKV_AWS_145
+  - CKV_AWS_158
+  # Replicación cross-region del bucket de estado: fuera de alcance.
+  - CKV_AWS_144
+  # Access logging del bucket de estado: el bucket solo guarda tfstate.
+  - CKV_AWS_18
+  # Retención de logs a 365 días: costo no justificado en dev.
+  - CKV_AWS_338
+  # Comunicación ALB -> tarea dentro de la VPC en HTTP.
+  - CKV_AWS_378
+  # HTTP 80 público es necesario para el redirect a HTTPS cuando hay certificado.
+  - CKV_AWS_260
+  # HTTPS/redirect: condicionado a certificate_arn; se valida en prod.
+  - CKV_AWS_2
+  - CKV_AWS_20
+  - CKV_AWS_103
+  # Deletion protection se activa con enable_deletion_protection en prod.
+  - CKV_AWS_150
+  # Uso intencional del data source de AZs.
+  - CKV_AWS_394

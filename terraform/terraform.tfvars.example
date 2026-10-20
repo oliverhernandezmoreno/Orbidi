@@ -1,0 +1,22 @@
+# Copiar a terraform.tfvars y ajustar. terraform.tfvars está en .gitignore.
+
+region = "us-east-1"
+# aws_profile = "default"
+
+name = "app-3"
+
+# Debe coincidir con bootstrap/ecr_repository_name
+ecr_repository_name = "orbidi/api"
+image_tag           = "latest"
+
+# ECS Fargate
+container_port = 8000
+task_cpu       = 256
+task_memory    = 512
+desired_count  = 2
+min_capacity   = 2
+max_capacity   = 6
+
+# DynamoDB
+table_name = "orbidi-app"
+hash_key   = "id"

@@ -3,160 +3,213 @@ name: terraform-infra-provisioning
 on:
   workflow_dispatch:
   push:
-    branches: [ '*' ]
-    paths-ignore:
-      - '**/README.md'
+    branches: [main]
   pull_request:
-    branches: ["main"]
-    paths-ignore:
-      - '**/README.md'
+    branches: [main]
+
+# Evita applies concurrentes sobre el mismo estado.
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions: read-all
-#--------------------------
-#
-# PLEASE READ: Add a GitHub Actions variable 'INFRACOST_SCAN_TYPE' and set the value to either 'hcl_code' or 'tf_plan' depending on what type of Infracost scan desired.
-#
-#--------------------------
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_INPUT: "false"
+  TERRAFORM_VERSION: "1.16.6"
+  AWS_REGION_NAME: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'orbidi/api' }}
+
 jobs:
-  terraform:
-    name: 'continuous-integration'
+  # ------------------------------------------------------------------
+  # Gate sin credenciales: valida los dos root modules.
+  # ------------------------------------------------------------------
+  validate:
+    name: fmt-and-validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Format
+        run: terraform fmt -check -recursive -diff
+
+      - name: Terraform Init (sin backend)
+        run: terraform init -backend=false -input=false
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+
+      - name: Bootstrap Format
+        working-directory: bootstrap
+        run: terraform fmt -check -recursive -diff
+
+      - name: Bootstrap Init (sin backend)
+        working-directory: bootstrap
+        run: terraform init -backend=false -input=false
+
+      - name: Bootstrap Validate
+        working-directory: bootstrap
+        run: terraform validate -no-color
+
+  # ------------------------------------------------------------------
+  # Plan/Apply con AWS. Requiere:
+  #   - bootstrap/ aplicado (estado remoto + ECR)
+  #   - variable AWS_DEPLOY_ENABLED=true
+  #   - secretos AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+  # ------------------------------------------------------------------
+  deploy:
+    name: plan-apply
+    needs: validate
+    if: vars.AWS_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: production
     permissions:
       contents: read
       id-token: write
       pull-requests: write
-    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    env:
+      INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
     defaults:
       run:
         shell: bash
+        working-directory: terraform
     steps:
-    # Checkout the repository to the GitHub Actions runner
-    - name: Checkout
-      uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Configure AWS Credentials Action For GitHub Actions
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        #role-to-assume: ${{ secrets.IAM_ROLE }}/my-github-actions-role-prod
-        #role-session-name: AWSSession
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION_NAME }}
 
-    - name: Setup Infracost
-      uses: infracost/actions/setup@v2
-      if: github.event_name == 'pull_request'
-      # See https://github.com/infracost/actions/tree/master/setup for other inputs
-      # If you can't use this action, see Docker images in https://infracost.io/cicd
-      with:
-        api-key: ${{ secrets.INFRACOST_API_KEY }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      # Checkout the base branch of the pull request (e.g. main/master).
-    - name: Checkout base branch
-      if: ${{ (github.event_name == 'pull_request') && (vars.INFRACOST_SCAN_TYPE  == 'hcl_code') }}
-      uses: actions/checkout@v3
-      with:
-        ref: '${{ github.event.pull_request.base.ref }}'
-      
-    # Generate Infracost JSON file as the baseline.
-    - name: Generate Infracost cost estimate baseline
-      if: ${{ (github.event_name == 'pull_request') && (vars.INFRACOST_SCAN_TYPE  == 'hcl_code') }}
-      run: |
-        infracost breakdown --path=. \
-                            --format=json \
-                            --out-file=/tmp/infracost-base.json
+      - name: Configure backend
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          cat > backend.hcl <<EOF
+          bucket         = "orbidi-tfstate-${ACCOUNT_ID}"
+          key            = "orbidi/terraform.tfstate"
+          region         = "${AWS_REGION_NAME}"
+          dynamodb_table = "orbidi-terraform-locks"
+          encrypt        = true
+          EOF
 
-    # Checkout the current PR branch so we can create a diff.
-    - name: Checkout PR branch
-      if: ${{ (github.event_name == 'pull_request') && (vars.INFRACOST_SCAN_TYPE  == 'hcl_code') }}
-      uses: actions/checkout@v3
+      - name: Terraform Init
+        id: init
+        run: terraform init -input=false -backend-config=backend.hcl
 
-    # Generate an Infracost diff and save it to a JSON file.
-    - name: Generate Infracost diff
-      if: ${{ (github.event_name == 'pull_request') && (vars.INFRACOST_SCAN_TYPE  == 'hcl_code') }}
-      run: |
-        infracost diff --path=. \
-                        --format=json \
-                        --compare-to=/tmp/infracost-base.json \
-                        --out-file=/tmp/infracost.json
+      - name: Resolve image tag
+        id: image
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          fi
 
-    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v1
+      - name: Login to ECR
+        if: github.event_name != 'pull_request'
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          aws ecr get-login-password --region "$AWS_REGION_NAME" \
+            | docker login --username AWS --password-stdin \
+                "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com"
 
-    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
-    - name: Terraform Init
-      id: init
-      run: terraform init
-    # Checks that all Terraform configuration files adhere to a canonical format
-    - name: Terraform Format
-      id: fmt
-      if: github.event_name == 'pull_request'
-      run: terraform fmt -check
-    # Checks that all Terraform configuration files are correctly written
-    - name: Terraform Validate
-      id: validate
-      if: github.event_name == 'pull_request'
-      run: terraform validate -no-color
-    # Generates an execution plan for Terraform
-    - name: Terraform Plan
-      id: plan
-      if: github.ref != 'refs/heads/main' || github.event_name == 'pull_request'
-      run: |
-        terraform plan -no-color -input=false -out=TFplan.JSON
-      continue-on-error: true
+      - name: Build and push image
+        if: github.event_name != 'pull_request'
+        working-directory: .
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${ECR_REPOSITORY}:${{ steps.image.outputs.tag }}"
+          docker build -t "$IMAGE" app
+          docker push "$IMAGE"
 
-    # Generate an Infracost diff and save it to a JSON file.
-    - name: Generate Infracost diff
-      if:  ${{ (github.event_name == 'pull_request') && (vars.INFRACOST_SCAN_TYPE  == 'tf_plan') }}
-      run: |
-        infracost diff --path=TFplan.JSON \
-                        --format=json \
-                        --out-file=/tmp/infracost.json
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -no-color -input=false \
+            -var="image_tag=${{ steps.image.outputs.tag }}" \
+            -out=tfplan.binary
 
-    - name: Post Infracost comment
-      if: github.event_name == 'pull_request'
-      run: |
+      - name: Terraform Show (JSON)
+        run: terraform show -json tfplan.binary > tfplan.json
+
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: |
+            terraform/tfplan.binary
+            terraform/tfplan.json
+          retention-days: 5
+
+      # -------------------- Infracost (opcional) --------------------
+      - name: Setup Infracost
+        if: github.event_name == 'pull_request' && vars.INFRACOST_SCAN_TYPE != '' && env.INFRACOST_API_KEY != ''
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ env.INFRACOST_API_KEY }}
+
+      - name: Generate Infracost diff
+        if: github.event_name == 'pull_request' && vars.INFRACOST_SCAN_TYPE != '' && env.INFRACOST_API_KEY != ''
+        run: |
+          infracost diff --path=tfplan.json \
+                         --format=json \
+                         --out-file=/tmp/infracost.json
+
+      - name: Post Infracost comment
+        if: github.event_name == 'pull_request' && vars.INFRACOST_SCAN_TYPE != '' && env.INFRACOST_API_KEY != ''
+        run: |
           infracost comment github --path=/tmp/infracost.json \
-                                    --repo=$GITHUB_REPOSITORY \
-                                    --github-token=${{github.token}} \
-                                    --pull-request=${{github.event.pull_request.number}} \
-                                    --show-skipped \
-                                    --behavior=update
+                                   --repo="$GITHUB_REPOSITORY" \
+                                   --github-token="${{ github.token }}" \
+                                   --pull-request="${{ github.event.pull_request.number }}" \
+                                   --behavior=update
 
-    - name: Post Terraform Plan Output
-      uses: actions/github-script@v6
-      if: github.event_name == 'pull_request'
-      env:
-          PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        script: |
-          const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-          #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-          #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
-          #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+      # -------------------- Resumen en el PR --------------------
+      - name: Post Terraform summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PLAN: ${{ steps.plan.outputs.stdout }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `#### Terraform Plan 📖 \`${{ steps.plan.outcome }}\`
+            <details><summary>Show plan</summary>
 
-          <details><summary>Show Plan</summary>
+            \`\`\`\n
+            ${process.env.PLAN}
+            \`\`\`
 
-          \`\`\`\n
-          ${process.env.PLAN}
-          \`\`\`
+            </details>
 
-          </details>
+            *Pushed by: @${{ github.actor }}*`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
 
-          *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
-
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: output
-          })
-
-    # On push to "main", build or change infrastructure according to Terraform configuration files
-    # Note: It is recommended to set up a required "strict" status check in your repository for "Terraform Cloud". See the documentation on "strict" required status checks for more information: https://help.github.com/en/github/administering-a-repository/types-of-required-status-checks
-    - name: Terraform Apply
-      if: github.ref == 'refs/heads/main'
-      run: terraform apply -auto-approve -input=false
+      # -------------------- Apply --------------------
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        run: terraform apply -input=false -auto-approve tfplan.binary
